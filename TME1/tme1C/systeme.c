@@ -5,27 +5,23 @@
 
 
 
-int CAPACITE_TAPIS = 5;
+#define CAPACITE_TAPIS 5
 int NB_PRODUCTEURS = 10;
 int NB_CONSOMMATEURS = 10;
 
 pthread_mutex_t mutc;
-pthread_mutex_t muta;
-pthread_mutex_t mutdef;
-pthread_mutex_t mutaenf;
+pthread_cond_t peut_produire;
+pthread_cond_t peut_consommer;
 
-typedef struct element{
-    struct element* suivant;
-    struct element* precedent;
-    char * paquet;
-}Element;
 
 typedef struct tapis{
-    Element* tete;
-    Element* queue;
-    int capacite;
+    char* tapis[CAPACITE_TAPIS];
+    int tete;
+    int queue;
     int cpt;
+    int finProduction; 
 }Tapis;
+
 
 typedef struct argprod{
     Tapis* tapis;
@@ -40,55 +36,41 @@ typedef struct argcons{
     int compt;
 }argCons;
 
-Element* creer_Element(char* paquet){
-    Element* newpaquet = malloc(sizeof(Element));
-    newpaquet->paquet = strdup(paquet);
-    newpaquet->suivant = NULL;
-    newpaquet->precedent = NULL;
-    return newpaquet;
-}
 
 void enfiler(Tapis* tapis, char * paquet){
-    while(1){
-        if (tapis->cpt < tapis->capacite){
+    pthread_mutex_lock(&mutc);
 
-            Element* newpaquet = creer_Element(paquet);
-            pthread_mutex_lock(&mutc);
-            Element* oldqueue = tapis->queue;
-            tapis->queue->suivant = newpaquet;
-            tapis->queue = tapis->queue->suivant;
-            newpaquet->precedent=oldqueue;
-            tapis->cpt++;
-            printf("Paquet: %s enfilé dans le tapis", paquet);
-            pthread_mutex_unlock(&mutc);
-            pthread_mutex_unlock(&mutaenf);
-            break;
-        }
-        else{
-            pthread_mutex_lock(&muta);
-        }
+    while(tapis->cpt == CAPACITE_TAPIS){
+        pthread_cond_wait(&peut_produire, &mutc);
     }
-    
+
+    tapis->tapis[tapis->queue] = paquet;
+    tapis->queue = (tapis->queue+1)%CAPACITE_TAPIS;
+    tapis->cpt++;
+    pthread_cond_signal(&peut_consommer);
+    pthread_mutex_unlock(&mutc);
+
 }
 
+
 char* defiler(Tapis* tapis){
-    while(1){
-        if(tapis->tete != NULL){
-            pthread_mutex_lock(&mutdef);
-            Element* newtete = tapis->tete->suivant; 
-            Element* oldtete = tapis->tete;
-            tapis->tete = NULL;
-            tapis->tete = newtete;
-            newtete->precedent = NULL;
-            tapis->cpt--;
-            printf("Paquet: %s défilé du tapis", oldtete->paquet);
-            pthread_mutex_unlock(&muta);
-            return oldtete->paquet;
-        }
-        else{
-            pthread_mutex_lock(&mutaenf);
-        }
+    pthread_mutex_lock(&mutc);
+
+    while(tapis->cpt==0 && !tapis->finProduction){
+        pthread_cond_wait(&peut_consommer, &mutc);
     }
+    if(tapis->finProduction){
+        return NULL;
+    }
+
+    char* paquet = tapis->tapis[tapis->tete];
+    tapis->tete = (tapis->tete+1)%CAPACITE_TAPIS;
+    tapis->cpt--;
+    pthread_cond_signal(&peut_produire);
+    pthread_mutex_unlock(&mutc);
+    return paquet;
+    
+
 }
 
 void* producteur(void* args){
@@ -99,11 +81,12 @@ void* producteur(void* args){
     int cible = arguments->cible;
     
     for (int i= 1; i<= cible; i++){
-        char numStr[12]; // Assumant que i ne soit pas très grand
+        char numStr[12];
         sprintf(numStr, "%d", i);
-        strcat(produit, numStr);
+        char* paquet = malloc(strlen(produit) + strlen(numStr) + 2);
+        sprintf(paquet, "%s %s", produit, numStr);
         enfiler(tapis, produit);
-        printf("producteur a enfilé son %d e paquet", i);
+        printf("producteur a enfilé %s\n", paquet);
     }
 }
 
@@ -116,8 +99,15 @@ void* consommateur(void* args){
     
     while(compt > 0){
         char* paquet = defiler(tapis);
-        printf("C%d mange %s", ident, paquet);
         compt--;
+        if (compt == 0){
+            tapis->finProduction = 1;
+        }
+        if (paquet == NULL){
+            break;
+        }
+        printf("C%d mange %s", ident, paquet);
+        
     }
 }
 
@@ -133,15 +123,15 @@ int main(){
     void* status;
     char *fruits[] = {"Pomme", "Banane", "Orange", "Fraise", "Raisin"};
     int cible = 3;
+
     pthread_mutex_init(&mutc, NULL);
-    pthread_mutex_init(&muta, NULL);
-    pthread_mutex_init(&mutdef, NULL);
-    pthread_mutex_init(&mutaenf, NULL);
+    pthread_cond_init(&peut_produire, NULL);
+    pthread_cond_init(&peut_consommer, NULL);
 
     Tapis * tapis = malloc(sizeof(Tapis));
-    tapis->tete = NULL;
-    tapis->queue = NULL;
-    tapis->capacite = CAPACITE_TAPIS;
+    tapis->tete = 0;
+    tapis->queue = 0;
+    //tapis->capacite = CAPACITE_TAPIS;
     tapis->cpt = 0;
 
     printf("ici\n");
@@ -161,7 +151,7 @@ int main(){
         argCons * args = malloc(sizeof(argCons)); 
         args->tapis = tapis;
         args-> ident = i;
-        args->compt = cible ;
+        args->compt = cible*NB_PRODUCTEURS ;
         pthread_create(&consommateurs[i], NULL, consommateur, args);
     }
 
@@ -175,7 +165,6 @@ int main(){
     }
 
     pthread_mutex_destroy(&mutc);
-    pthread_mutex_destroy(&muta);
-    pthread_mutex_destroy(&mutdef);
-    pthread_mutex_destroy(&mutaenf);
+    pthread_cond_destroy(&peut_produire);
+    pthread_cond_destroy(&peut_consommer);
 }
