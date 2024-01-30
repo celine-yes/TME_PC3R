@@ -4,23 +4,26 @@
 #include <pthread.h>
 
 
-
+//Initialisation
 #define CAPACITE_TAPIS 5
-int NB_PRODUCTEURS = 10;
-int NB_CONSOMMATEURS = 10;
+#define NB_PRODUCTEURS 10
+#define NB_CONSOMMATEURS 10
+#define CIBLE 3
 
+
+//Mutex et conditions
 pthread_mutex_t mutc;
 pthread_cond_t peut_produire;
 pthread_cond_t peut_consommer;
 pthread_mutex_t mutc_compteur;
 
 
+//definitions des différentes structures
 typedef struct tapis{
     char* tapis[CAPACITE_TAPIS];
     int tete;
     int queue;
     int cpt;
-    int finProduction; 
     int compt;
 }Tapis;
 
@@ -39,6 +42,7 @@ typedef struct argcons{
 }argCons;
 
 
+// fonction appelé par producteur
 void enfiler(Tapis* tapis, char * paquet){
     pthread_mutex_lock(&mutc);
 
@@ -54,15 +58,12 @@ void enfiler(Tapis* tapis, char * paquet){
 
 }
 
-
+// fonction appelé par consommateur
 char* defiler(Tapis* tapis){
     pthread_mutex_lock(&mutc);
 
-    while(tapis->cpt==0 && !tapis->finProduction){
+    while(tapis->cpt==0 ){
         pthread_cond_wait(&peut_consommer, &mutc);
-    }
-    if(tapis->finProduction){
-        return NULL;
     }
 
     char* paquet = tapis->tapis[tapis->tete];
@@ -111,18 +112,7 @@ void* consommateur(void* args){
         printf("C%d mange %s\n", ident, paquet);
 
         pthread_mutex_unlock(&mutc_compteur);
-        
-        printf("compt = %d\n", tapis->compt);
-        // if (tapis->compt == 0){
-        //     printf("Producteurs ont finit de produire\n");
-        //     tapis->finProduction = 1;
-        // }
-    
-        // if (paquet == NULL){
-        //     break;
-        // }
-        
-        
+         
     }
 }
 
@@ -137,7 +127,7 @@ int main(){
     pthread_t consommateurs[NB_CONSOMMATEURS];
     void* status;
     char *fruits[] = {"mangue", "fraise", "framboise", "kiwi", "pomme", "banane", "lichi", "orange", "mandarine", "prune", "mure", "cassis"};
-    int cible = 3;
+
 
     pthread_mutex_init(&mutc, NULL);
     pthread_cond_init(&peut_produire, NULL);
@@ -148,9 +138,8 @@ int main(){
     Tapis * tapis = malloc(sizeof(Tapis));
     tapis->tete = 0;
     tapis->queue = 0;
-    //tapis->capacite = CAPACITE_TAPIS;
     tapis->cpt = 0;
-    tapis->compt = cible*NB_PRODUCTEURS;
+    tapis->compt = CIBLE*NB_PRODUCTEURS;
 
     printf("ici\n");
 
@@ -158,7 +147,7 @@ int main(){
         argProd * args=malloc(sizeof(argProd)); 
         args->tapis = tapis;
         args->produit = fruits[i];
-        args->cible = cible ;
+        args->cible = CIBLE ;
         pthread_create(&producteurs[i], NULL, producteur, args );
         printf("producteur %d crée\n", i);
     }
