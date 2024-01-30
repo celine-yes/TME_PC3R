@@ -106,7 +106,6 @@ void* consommateur(void* args){
             break;
         }
         
-
         char* paquet = defiler(tapis);
         tapis->compt--;
         printf("C%d mange %s\n", ident, paquet);

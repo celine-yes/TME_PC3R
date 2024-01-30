@@ -5,7 +5,6 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 
-
 struct Paquet {
     contenu: String,
 }
@@ -16,6 +15,11 @@ struct Tapis {
 }
 
 impl Tapis {
+    fn new(capacity: usize) -> Self {
+        Tapis {
+            file: VecDeque::with_capacity(capacity),
+        }
+    }
 
     fn enfiler(&mut self, paquet: Paquet) {
         self.file.push_back(paquet);
@@ -33,13 +37,13 @@ struct EtatProduction {
 
 
 fn main() {
-    let tapis = Arc::new(Mutex::new(Tapis { file: VecDeque::new() }));
+    let tapis = Arc::new(Mutex::new(Tapis::new(5)));
     let compteur = Arc::new(Mutex::new(0));
     let (tx, rx) = mpsc::channel();
     let nbProd = 5;
     let nbCons = 5;
     let cible = 3;
-    let fruits = vec!["Mangue", "Fraise", "Framboise", "Pomme", "Raisin"];
+    let fruits = vec!["mangue", "fraise", "framboise", "kiwi", "pomme", "banane", "lichi", "orange", "mandarine", "prune", "mure", "cassis"];
     let etat_production = Arc::new(Mutex::new(EtatProduction { production_terminee: false }));
 
     // Création des threads producteurs
@@ -82,7 +86,7 @@ fn main() {
     }
 
     // Attente que tous les paquets soient produits
-    for _ in 0..5 {
+    for _ in 0..(cible * nbProd) {
         rx.recv().unwrap();
     }
     println!("Tous les paquets ont été produits.");
