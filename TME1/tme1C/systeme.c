@@ -141,7 +141,6 @@ int main(){
     tapis->cpt = 0;
     tapis->compt = CIBLE*NB_PRODUCTEURS;
 
-    printf("ici\n");
 
     for (int i=0; i<NB_PRODUCTEURS; i++){
         argProd * args=malloc(sizeof(argProd)); 
@@ -152,7 +151,6 @@ int main(){
         printf("producteur %d crée\n", i);
     }
 
-    printf("la\n");
 
     for (int i=0; i<NB_CONSOMMATEURS; i++){
         argCons * args = malloc(sizeof(argCons)); 
@@ -161,7 +159,6 @@ int main(){
         pthread_create(&consommateurs[i], NULL, consommateur, args);
     }
 
-    printf("wow\n");
 
     for (int i=0; i<NB_PRODUCTEURS; i++){
         pthread_join(producteurs[i],&status);
