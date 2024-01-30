@@ -4,11 +4,11 @@ package tme1java;
 public class Main {
     public static void main(String[] args) {
 
-    	int capacite = 6; 
+    	int capacite = 7; 
         int nbProd = 6;
-        int nbCons = 5; 
+        int nbCons = 6; 
         int cibleProd = 3;
-        String[] fruits = {"mangue", "fraise", "framboise", "kiwi", "pomme"};
+        String[] fruits = {"mangue", "fraise", "framboise", "kiwi", "pomme", "banane", "lichi", "orange", "mandarine", "prune", "mure", "cassis"};
         
 
         Tapis tapis = new Tapis(capacite);

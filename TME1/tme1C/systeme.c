@@ -121,7 +121,7 @@ int main(){
     pthread_t producteurs[NB_PRODUCTEURS];
     pthread_t consommateurs[NB_CONSOMMATEURS];
     void* status;
-    char *fruits[] = {"Pomme", "Banane", "Orange", "Fraise", "Raisin"};
+    char *fruits[] = {"mangue", "fraise", "framboise", "kiwi", "pomme", "banane", "lichi", "orange", "mandarine", "prune", "mure", "cassis"};
     int cible = 3;
 
     pthread_mutex_init(&mutc, NULL);
