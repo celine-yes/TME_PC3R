@@ -1,14 +1,11 @@
 use std::sync::{Arc, Mutex};
 use std::collections::VecDeque;
 use std::thread;
-use std::sync::mpsc;
 use std::time::Duration;
-
 
 struct Paquet {
     contenu: String,
 }
-
 
 struct Tapis {
     file: VecDeque<Paquet>,
@@ -30,41 +27,37 @@ impl Tapis {
     }
 }
 
-struct EtatProduction {
-    production_terminee: bool,
+struct EtatPaquet {
+    plus_de_paquet: bool,
 }
 
-
-
 fn main() {
+    // Initialisation
+    // NB MAX de producteurs est égal à la taille du tableau fruits
     let tapis = Arc::new(Mutex::new(Tapis::new(5)));
-    let compteur = Arc::new(Mutex::new(0));
-    let (tx, rx) = mpsc::channel();
-    let nbProd = 5;
-    let nbCons = 5;
+    let nb_prod = 5;
+    let nb_cons = 5;
     let cible = 3;
     let fruits = vec!["mangue", "fraise", "framboise", "kiwi", "pomme", "banane", "lichi", "orange", "mandarine", "prune", "mure", "cassis"];
-    let etat_production = Arc::new(Mutex::new(EtatProduction { production_terminee: false }));
+    let etat_production = Arc::new(Mutex::new(EtatPaquet { plus_de_paquet: false }));
+    let compteur = Arc::new(Mutex::new(cible * nb_prod));
 
-    // Création des threads producteurs
-    for i in 0..nbProd {
-		let tapis_clone = Arc::clone(&tapis);
-    	let tx_clone = tx.clone();
-    	let fruits_clone = fruits.clone();
+    // producteurs
+    for i in 0..nb_prod {
+        let tapis_clone = Arc::clone(&tapis);
+        let fruits_clone = fruits.clone();
 
-    	thread::spawn(move || {
-		    for j in 0..cible {
-		        let paquet = Paquet { contenu: format!("{} {}", fruits_clone[i], j) };
-		        println!("Produit: {}", paquet.contenu);
-		        tapis_clone.lock().unwrap().enfiler(paquet);
-		        tx_clone.send(()).unwrap();
-		    }
-    	});
-    	
+        thread::spawn(move || {
+            for j in 0..cible {
+                let paquet = Paquet { contenu: format!("{} {}", fruits_clone[i], j) };
+                println!("Produit: {}", paquet.contenu);
+                tapis_clone.lock().unwrap().enfiler(paquet);
+            }
+        });
     }
 
-    // Création des threads consommateurs
-    for _ in 0..nbCons {
+    // consommateurs
+    for _ in 0..nb_cons {
         let tapis_clone = Arc::clone(&tapis);
         let compteur_clone = Arc::clone(&compteur);
         let etat_prod_clone = Arc::clone(&etat_production);
@@ -74,10 +67,17 @@ fn main() {
                 let mut tapis = tapis_clone.lock().unwrap();
                 if let Some(paquet) = tapis.defiler() {
                     println!("Consommé: {}", paquet.contenu);
-                    *compteur_clone.lock().unwrap() += 1;
+                    *compteur_clone.lock().unwrap() -= 1;
+
+                    // si tous les paquets sont consommés
+                    if *compteur_clone.lock().unwrap() == 0 {
+                        // alors consommateur peut s'arrêter
+                        *etat_prod_clone.lock().unwrap() = EtatPaquet { plus_de_paquet: true };
+                        break;
+                    }
                 } else {
-                    // Vérifie si la production est terminée
-                    if etat_prod_clone.lock().unwrap().production_terminee {
+                    // vérifie si production terminée
+                    if etat_prod_clone.lock().unwrap().plus_de_paquet{
                         break;
                     }
                 }
@@ -85,23 +85,12 @@ fn main() {
         });
     }
 
-    // Attente que tous les paquets soient produits
-    for _ in 0..(cible * nbProd) {
-        rx.recv().unwrap();
-    }
     println!("Tous les paquets ont été produits.");
 
-    // Attente que tous les paquets soient consommés
-    thread::sleep(Duration::from_secs(1));
-    let compteur_final = compteur.lock().unwrap();
-    println!("Nombre de paquets consommés: {}", *compteur_final);
+    // Attends que tous les paquets soient consommés
+    while *compteur.lock().unwrap() > 0 {
+        thread::sleep(Duration::from_secs(1));
+    }
+
+    println!("Tous les paquets ont été consommés.");
 }
-
-
-
-
-
-
-
-
-

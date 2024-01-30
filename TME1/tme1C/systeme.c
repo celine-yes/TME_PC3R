@@ -5,6 +5,8 @@
 
 
 //Initialisation
+//NB MAX de producteurs est égal à la taille du tableau fruits
+//dans le main
 #define CAPACITE_TAPIS 5
 #define NB_PRODUCTEURS 10
 #define NB_CONSOMMATEURS 10
@@ -60,6 +62,8 @@ void enfiler(Tapis* tapis, char * paquet){
 
 // fonction appelé par consommateur
 char* defiler(Tapis* tapis){
+
+    //vérouiller l'accès au tapis
     pthread_mutex_lock(&mutc);
 
     while(tapis->cpt==0 ){
@@ -100,6 +104,8 @@ void* consommateur(void* args){
     int ident = arguments->ident;
     
     while(1){
+
+        //vérouiller l'accès au compteur
         pthread_mutex_lock(&mutc_compteur);
         if (tapis->compt <= 0){
             pthread_mutex_unlock(&mutc_compteur);
@@ -115,9 +121,6 @@ void* consommateur(void* args){
     }
 }
 
-void free_Tapis(Tapis * tapis){
-
-}
 
 int main(){
 

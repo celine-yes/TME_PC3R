@@ -45,7 +45,6 @@ public class Tapis {
         if(finProduction) {
         	return null;
         }
-
         Paquet paquet = array[tete];
         tete = (tete + 1) % capacite;
         taille--;

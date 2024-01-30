@@ -18,18 +18,15 @@ class Consommateur extends Thread {
                 Paquet paquet = tapis.defiler();
                 compteur.decrementer();
                 
-                
+                //vérifie s'il n'y a plus de paquet à consommer
                 if(compteur.getValeur() == 0) {
                 	tapis.signalerFinProduction();
                 }
                 if(paquet == null) {
                 	break;
                 }
-                
                 System.out.println("C" + idCons + " mange " + paquet.getContenu());
                 
-                
-   
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 break;
