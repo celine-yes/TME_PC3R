@@ -12,6 +12,7 @@ int NB_CONSOMMATEURS = 10;
 pthread_mutex_t mutc;
 pthread_cond_t peut_produire;
 pthread_cond_t peut_consommer;
+pthread_mutex_t mutc_compteur;
 
 
 typedef struct tapis{
@@ -20,6 +21,7 @@ typedef struct tapis{
     int queue;
     int cpt;
     int finProduction; 
+    int compt;
 }Tapis;
 
 
@@ -33,7 +35,7 @@ typedef struct argprod{
 typedef struct argcons{
     Tapis* tapis;
     int ident;
-    int compt;
+
 }argCons;
 
 
@@ -85,7 +87,7 @@ void* producteur(void* args){
         sprintf(numStr, "%d", i);
         char* paquet = malloc(strlen(produit) + strlen(numStr) + 2);
         sprintf(paquet, "%s %s", produit, numStr);
-        enfiler(tapis, produit);
+        enfiler(tapis, paquet);
         printf("producteur a enfilé %s\n", paquet);
     }
 }
@@ -95,18 +97,31 @@ void* consommateur(void* args){
     argCons* arguments = (argCons*)args;
     Tapis* tapis = arguments->tapis;
     int ident = arguments->ident;
-    int compt = arguments->compt;
     
-    while(compt > 0){
-        char* paquet = defiler(tapis);
-        compt--;
-        if (compt == 0){
-            tapis->finProduction = 1;
-        }
-        if (paquet == NULL){
+    while(1){
+        pthread_mutex_lock(&mutc_compteur);
+        if (tapis->compt <= 0){
+            pthread_mutex_unlock(&mutc_compteur);
             break;
         }
-        printf("C%d mange %s", ident, paquet);
+        
+
+        char* paquet = defiler(tapis);
+        tapis->compt--;
+        printf("C%d mange %s\n", ident, paquet);
+
+        pthread_mutex_unlock(&mutc_compteur);
+        
+        printf("compt = %d\n", tapis->compt);
+        // if (tapis->compt == 0){
+        //     printf("Producteurs ont finit de produire\n");
+        //     tapis->finProduction = 1;
+        // }
+    
+        // if (paquet == NULL){
+        //     break;
+        // }
+        
         
     }
 }
@@ -127,12 +142,15 @@ int main(){
     pthread_mutex_init(&mutc, NULL);
     pthread_cond_init(&peut_produire, NULL);
     pthread_cond_init(&peut_consommer, NULL);
+    pthread_mutex_init(&mutc_compteur, NULL);
+
 
     Tapis * tapis = malloc(sizeof(Tapis));
     tapis->tete = 0;
     tapis->queue = 0;
     //tapis->capacite = CAPACITE_TAPIS;
     tapis->cpt = 0;
+    tapis->compt = cible*NB_PRODUCTEURS;
 
     printf("ici\n");
 
@@ -151,7 +169,6 @@ int main(){
         argCons * args = malloc(sizeof(argCons)); 
         args->tapis = tapis;
         args-> ident = i;
-        args->compt = cible*NB_PRODUCTEURS ;
         pthread_create(&consommateurs[i], NULL, consommateur, args);
     }
 
