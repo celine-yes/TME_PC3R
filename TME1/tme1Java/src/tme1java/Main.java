@@ -4,10 +4,10 @@ package tme1java;
 public class Main {
     public static void main(String[] args) {
 
-    	int capacite = 5; 
-        int nbProd = 3;
-        int nbCons = 3; 
-        int cibleProd = 5;
+    	int capacite = 6; 
+        int nbProd = 6;
+        int nbCons = 5; 
+        int cibleProd = 3;
         String[] fruits = {"mangue", "fraise", "framboise", "kiwi", "pomme"};
         
 
