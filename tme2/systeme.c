@@ -19,9 +19,9 @@
 //Mutex, conditions, ordonnanceur
 ft_scheduler_t scheduler_prod;
 ft_scheduler_t scheduler_cons;
-ft_thread_t producteurs[NB_PRODUCTEURS];
-ft_thread_t consommateurs[NB_CONSOMMATEURS];
-ft_thread_t messagers[NB_MESSAGERS];
+// ft_thread_t producteurs[NB_PRODUCTEURS];
+// ft_thread_t consommateurs[NB_CONSOMMATEURS];
+// ft_thread_t messagers[NB_MESSAGERS];
 ft_cond_t peut_consommer, peut_produire, peut_transporter;
 ft_mutex_t mutex_cons, mutex_prod, mutex_journal_cons, mutex_journal_prod, mutex_journal_mess, mutex_compt;
 
@@ -205,8 +205,6 @@ void * messager(void* args){
 int main(){
 
     int i;
-    pthread_t producteurs[NB_PRODUCTEURS];
-    pthread_t consommateurs[NB_CONSOMMATEURS];
     void* status;
     char *fruits[] = {"mangue", "fraise", "framboise", "kiwi", "pomme", "banane", "lichi", "orange", "mandarine", "prune", "mure", "cassis"};
 
@@ -232,7 +230,7 @@ int main(){
         args->tapis = tapis;
         args->produit = fruits[i];
         args->cible = CIBLE ;
-        pthread_create(&producteurs[i], NULL, producteur, args );
+        ft_thread_create(scheduler_prod, producteur, NULL, args );
         printf("producteur %d crée\n", i);
     }
 
@@ -241,18 +239,17 @@ int main(){
         argCons * args = malloc(sizeof(argCons)); 
         args->tapis = tapis;
         args-> ident = i;
-        pthread_create(&consommateurs[i], NULL, consommateur, args);
+        ft_thread_create(scheduler_cons, consommateur, NULL, args);
     }
 
+    ft_scheduler_start(scheduler_cons);
+    ft_scheduler_start(scheduler_prod);
 
     for (int i=0; i<NB_PRODUCTEURS; i++){
-        pthread_join(producteurs[i],&status);
+        ft_thread_join(producteurs[i]);
     }
     for (int i=0; i<NB_CONSOMMATEURS; i++){
-        pthread_join(consommateurs[i],&status);
+        ft_thread_join(consommateurs[i]);
     }
 
-    pthread_mutex_destroy(&mutc);
-    pthread_cond_destroy(&peut_produire);
-    pthread_cond_destroy(&peut_consommer);
 }
