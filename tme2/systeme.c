@@ -19,11 +19,6 @@
 //Mutex, conditions, ordonnanceur
 ft_scheduler_t scheduler_prod;
 ft_scheduler_t scheduler_cons;
-// ft_thread_t producteurs[NB_PRODUCTEURS];
-// ft_thread_t consommateurs[NB_CONSOMMATEURS];
-// ft_thread_t messagers[NB_MESSAGERS];
-ft_cond_t peut_consommer, peut_produire, peut_transporter;
-ft_mutex_t mutex_cons, mutex_prod, mutex_journal_cons, mutex_journal_prod, mutex_journal_mess, mutex_compt;
 
 //Fichiers Journaux
 char* journal_prod, journal_cons, journal_mess;
@@ -63,12 +58,12 @@ typedef struct argmess{
     Tapis* tapis_prod;
     int ident;
     char* journal;
-}argCons;
+}argMess;
 
 
 
-int ecrire_fichier(char* fichier, char* texte){
-    FILE *fichier = fopen(fichier, "w");
+int ecrire_fichier(char* nom_fichier, char* texte){
+    FILE *fichier = fopen(nom_fichier, "w");
 
     if (fichier == NULL) {
         printf("Le fichier n'a pas pu s'ouvrir correctement\n");
@@ -84,10 +79,10 @@ int ecrire_fichier(char* fichier, char* texte){
 
 // fonction appelé par producteur
 void enfiler(Tapis* tapis, Paquet * paquet){
-    ft_mutex_lock(&mutex_prod);
+    //ft_mutex_lock(&mutex_prod);
 
     while(tapis->cpt == CAPACITE_TAPIS){
-        ft_thread_await_condition(&peut_produire);
+        ft_thread_cooperate();
     }
 
     tapis->tapis[tapis->queue] = paquet;
@@ -95,8 +90,8 @@ void enfiler(Tapis* tapis, Paquet * paquet){
     tapis->cpt++;
 
 
-    ft_thread_generate_condition(&peut_transporter);
-    ft_mutex_unlock(&mutex_prod);
+    // ft_thread_generate_condition(&peut_transporter);
+    //ft_mutex_unlock(&mutex_prod);
 
 }
 
@@ -104,16 +99,17 @@ void enfiler(Tapis* tapis, Paquet * paquet){
 // fonction appelé par consommateur
 char* defiler(Tapis* tapis){
 
-    ft_mutex_lock(&mutex_cons);
+    //ft_mutex_lock(&mutex_cons);
 
     while(tapis->cpt==0 ){
-        ft_thread_await_condition(&peut_consommer);
+        ft_thread_cooperate();
     }
 
     char* paquet = tapis->tapis[tapis->tete];
     tapis->tete = (tapis->tete+1)%CAPACITE_TAPIS;
     tapis->cpt--;
-    ft_mutex_unlock(&mutex_cons);
+
+    //ft_mutex_unlock(&mutex_cons);
     return paquet;
     
 
@@ -134,9 +130,9 @@ void* producteur(void* args){
         sprintf(paquet, "%s %s", produit, numStr);
         enfiler(tapis, paquet);
 
-        ft_mutex_lock(&mutex_journal_prod);
+        //ft_mutex_lock(&mutex_journal_prod);
         int ecriture_journal = ecrire_fichier(journal, paquet);
-        ft_mutex_unlock(&mutex_journal_prod);
+        //ft_mutex_unlock(&mutex_journal_prod);
 
         ft_thread_cooperate();
     }
@@ -152,18 +148,18 @@ void* consommateur(void* args){
     while(1){
 
         //vérouiller l'accès au compteur
-        ft_mutex_lock(&mutc_compteur);
+        //ft_mutex_lock(&mutex_compt);
         if (tapis->compt <= 0){
-            ft_mutex_unlock(&mutc_compteur);
+            //ft_mutex_unlock(&mutex_compt);
             break;
         }
         
         char* paquet = defiler(tapis);
-        ft_mutex_lock(&mutex_journal_cons);
+        //ft_mutex_lock(&mutex_journal_cons);
         int ecriture_journal = ecrire_fichier(journal, paquet);
-        ft_mutex_unlock(&mutex_journal_cons);
+        //ft_mutex_unlock(&mutex_journal_cons);
         tapis->compt--;
-        ft_mutex_unlock(&mutc_compteur);
+        //ft_mutex_unlock(&mutex_compt);
         ft_thread_cooperate();
          
     }
@@ -172,7 +168,7 @@ void* consommateur(void* args){
 
 void * messager(void* args){
 
-    argCons* arguments = (argCons*)args;
+    argMess* arguments = (argMess*)args;
     Tapis* tapis_cons = arguments->tapis_cons;
     Tapis* tapis_prod = arguments->tapis_prod;
     int ident = arguments->ident;
@@ -181,20 +177,20 @@ void * messager(void* args){
     while(1){
 
         //vérouiller l'accès au compteur
-        ft_mutex_lock(&mutc_compteur);
-        if (tapis->compt == 0){
-            ft_mutex_unlock(&mutc_compteur);
+        //ft_mutex_lock(&mutex_compt);
+        if (tapis_cons->compt == 0){
+            //ft_mutex_unlock(&mutex_compt);
             break;
         }
         ft_thread_link(scheduler_prod);
         Paquet* paquet = defiler(tapis_prod);
-        ft_thread_unlink(scheduler_prod);
+        ft_thread_unlink();
 
         ecrire_fichier(journal, paquet);
 
         ft_thread_link(scheduler_cons);
         enfiler(tapis_cons, paquet);
-        ft_thread_unlink(scheduler_cons);       
+        ft_thread_unlink();       
     }
     
 }
@@ -209,10 +205,10 @@ int main(){
     char *fruits[] = {"mangue", "fraise", "framboise", "kiwi", "pomme", "banane", "lichi", "orange", "mandarine", "prune", "mure", "cassis"};
 
 
-    pthread_mutex_init(&mutc, NULL);
-    pthread_cond_init(&peut_produire, NULL);
-    pthread_cond_init(&peut_consommer, NULL);
-    pthread_mutex_init(&mutc_compteur, NULL);
+    // pthread_mutex_init(&mutc, NULL);
+    // pthread_cond_init(&peut_produire, NULL);
+    // pthread_cond_init(&peut_consommer, NULL);
+    // pthread_mutex_init(&mutc_compteur, NULL);
 
     ft_scheduler_t scheduler_cons = ft_scheduler_create(); 
     ft_scheduler_t scheduler_prod = ft_scheduler_create(); 
@@ -230,7 +226,7 @@ int main(){
         args->tapis = tapis;
         args->produit = fruits[i];
         args->cible = CIBLE ;
-        ft_thread_create(scheduler_prod, producteur, NULL, args );
+        ft_thread_create(scheduler_prod, producteur, NULL, args);
         printf("producteur %d crée\n", i);
     }
 
@@ -245,11 +241,11 @@ int main(){
     ft_scheduler_start(scheduler_cons);
     ft_scheduler_start(scheduler_prod);
 
-    for (int i=0; i<NB_PRODUCTEURS; i++){
-        ft_thread_join(producteurs[i]);
-    }
-    for (int i=0; i<NB_CONSOMMATEURS; i++){
-        ft_thread_join(consommateurs[i]);
-    }
+    // for (int i=0; i<NB_PRODUCTEURS; i++){
+    //     ft_thread_join(producteurs[i]);
+    // }
+    // for (int i=0; i<NB_CONSOMMATEURS; i++){
+    //     ft_thread_join(consommateurs[i]);
+    // }
 
 }
