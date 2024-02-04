@@ -4,12 +4,12 @@ OUTPUT = systeme
 
 CC = gcc
 
-CFLAGS = -D_REENTRANT -I ft_v1.0/include/ -L ft_v1.0/lib/ -pthread -lfthread
+CFLAGS = -D_REENTRANT -I ft_v1.0/include/ -L ft_v1.0/lib/
 
 all: $(OUTPUT)
 
 $(OUTPUT): $(SOURCE)
-	$(CC) $(CFLAGS) -o $(OUTPUT) $(SOURCE)
+	$(CC) $(CFLAGS) -o $(OUTPUT) $(SOURCE) -pthread -lfthread
 
 clean:
 	rm -f $(OUTPUT)

@@ -97,7 +97,7 @@ void enfiler(Tapis* tapis, Paquet * paquet){
 
 
 // fonction appelé par consommateur
-char* defiler(Tapis* tapis){
+Paquet* defiler(Tapis* tapis){
 
     //ft_mutex_lock(&mutex_cons);
 
@@ -105,7 +105,7 @@ char* defiler(Tapis* tapis){
         ft_thread_cooperate();
     }
 
-    char* paquet = tapis->tapis[tapis->tete];
+    Paquet* paquet = tapis->tapis[tapis->tete];
     tapis->tete = (tapis->tete+1)%CAPACITE_TAPIS;
     tapis->cpt--;
 
@@ -115,7 +115,7 @@ char* defiler(Tapis* tapis){
 
 }
 
-void* producteur(void* args){
+void producteur(void* args){
 
     argProd* arguments = (argProd*)args;
     Tapis* tapis = arguments->tapis;
@@ -126,19 +126,21 @@ void* producteur(void* args){
     for (int i= 1; i<= cible; i++){
         char numStr[12];
         sprintf(numStr, "%d", i);
-        char* paquet = malloc(strlen(produit) + strlen(numStr) + 2);
-        sprintf(paquet, "%s %s", produit, numStr);
+        char* paquet_str = malloc(strlen(produit) + strlen(numStr) + 2);
+        sprintf(paquet_str, "%s %s", produit, numStr);
+        Paquet* paquet = malloc(sizeof(Paquet));
+        paquet->contenu = paquet_str;
         enfiler(tapis, paquet);
 
         //ft_mutex_lock(&mutex_journal_prod);
-        int ecriture_journal = ecrire_fichier(journal, paquet);
+        int ecriture_journal = ecrire_fichier(journal, paquet_str);
         //ft_mutex_unlock(&mutex_journal_prod);
 
         ft_thread_cooperate();
     }
 }
 
-void* consommateur(void* args){
+void consommateur(void* args){
 
     argCons* arguments = (argCons*)args;
     Tapis* tapis = arguments->tapis;
@@ -154,9 +156,9 @@ void* consommateur(void* args){
             break;
         }
         
-        char* paquet = defiler(tapis);
+        Paquet* paquet = defiler(tapis);
         //ft_mutex_lock(&mutex_journal_cons);
-        int ecriture_journal = ecrire_fichier(journal, paquet);
+        int ecriture_journal = ecrire_fichier(journal, paquet->contenu);
         //ft_mutex_unlock(&mutex_journal_cons);
         tapis->compt--;
         //ft_mutex_unlock(&mutex_compt);
@@ -166,7 +168,7 @@ void* consommateur(void* args){
 }
 
 
-void * messager(void* args){
+void messager(void* args){
 
     argMess* arguments = (argMess*)args;
     Tapis* tapis_cons = arguments->tapis_cons;
@@ -186,7 +188,7 @@ void * messager(void* args){
         Paquet* paquet = defiler(tapis_prod);
         ft_thread_unlink();
 
-        ecrire_fichier(journal, paquet);
+        ecrire_fichier(journal, paquet->contenu);
 
         ft_thread_link(scheduler_cons);
         enfiler(tapis_cons, paquet);
@@ -214,16 +216,22 @@ int main(){
     ft_scheduler_t scheduler_prod = ft_scheduler_create(); 
 
 
-    Tapis * tapis = malloc(sizeof(Tapis));
-    tapis->tete = 0;
-    tapis->queue = 0;
-    tapis->cpt = 0;
-    tapis->compt = CIBLE*NB_PRODUCTEURS;
+    Tapis * tapis_cons = malloc(sizeof(Tapis));
+    tapis_cons->tete = 0;
+    tapis_cons->queue = 0;
+    tapis_cons->cpt = 0;
+    tapis_cons->compt = CIBLE*NB_PRODUCTEURS;
+
+    Tapis * tapis_prod = malloc(sizeof(Tapis));
+    tapis_prod->tete = 0;
+    tapis_prod->queue = 0;
+    tapis_prod->cpt = 0;
+    tapis_prod->compt = CIBLE*NB_PRODUCTEURS;
 
 
     for (int i=0; i<NB_PRODUCTEURS; i++){
         argProd * args=malloc(sizeof(argProd)); 
-        args->tapis = tapis;
+        args->tapis = tapis_prod;
         args->produit = fruits[i];
         args->cible = CIBLE ;
         ft_thread_create(scheduler_prod, producteur, NULL, args);
@@ -233,9 +241,17 @@ int main(){
 
     for (int i=0; i<NB_CONSOMMATEURS; i++){
         argCons * args = malloc(sizeof(argCons)); 
-        args->tapis = tapis;
+        args->tapis = tapis_cons;
         args-> ident = i;
         ft_thread_create(scheduler_cons, consommateur, NULL, args);
+    }
+
+    for (int i=0; i<NB_MESSAGERS; i++){
+        argMess * args = malloc(sizeof(argMess)); 
+        args->tapis_cons = tapis_cons;
+        args->tapis_prod = tapis_prod;
+        args-> ident = i;
+        ft_thread_create(NULL, messager, NULL, args);
     }
 
     ft_scheduler_start(scheduler_cons);
