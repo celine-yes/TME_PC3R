@@ -10,15 +10,19 @@
 //NB MAX de producteurs est égal à la taille du tableau fruits
 //dans le main
 #define CAPACITE_TAPIS 5
-#define NB_PRODUCTEURS 10
-#define NB_CONSOMMATEURS 10
-#define NB_MESSAGERS 10
+#define NB_PRODUCTEURS 3
+#define NB_CONSOMMATEURS 3
+#define NB_MESSAGERS 2
 #define CIBLE 3
 
 
 //Mutex, conditions, ordonnanceur
 ft_scheduler_t scheduler_prod;
 ft_scheduler_t scheduler_cons;
+
+ft_event_t ecriture_journal_prod, ecriture_journal_cons, ecriture_journal_mess;
+ft_event_t peut_enfiler, peut_defiler, compteur;
+
 
 //Fichiers Journaux
 char* journal_prod, journal_cons, journal_mess;
@@ -63,7 +67,7 @@ typedef struct argmess{
 
 
 int ecrire_fichier(char* nom_fichier, char* texte){
-    FILE *fichier = fopen(nom_fichier, "w");
+    FILE *fichier = fopen(nom_fichier, "a");
 
     if (fichier == NULL) {
         printf("Le fichier n'a pas pu s'ouvrir correctement\n");
@@ -127,14 +131,16 @@ void producteur(void* args){
         char numStr[12];
         sprintf(numStr, "%d", i);
         char* paquet_str = malloc(strlen(produit) + strlen(numStr) + 2);
-        sprintf(paquet_str, "%s %s", produit, numStr);
+        sprintf(paquet_str, "%s %s\n", produit, numStr);
         Paquet* paquet = malloc(sizeof(Paquet));
         paquet->contenu = paquet_str;
         enfiler(tapis, paquet);
-
-        //ft_mutex_lock(&mutex_journal_prod);
+    
+        ft_thread_await(ecriture_journal_prod);
         int ecriture_journal = ecrire_fichier(journal, paquet_str);
-        //ft_mutex_unlock(&mutex_journal_prod);
+        printf("producteur a enfilé %s\n", paquet->contenu);
+
+        ft_thread_generate(ecriture_journal_prod);
 
         ft_thread_cooperate();
     }
@@ -157,9 +163,12 @@ void consommateur(void* args){
         }
         
         Paquet* paquet = defiler(tapis);
-        //ft_mutex_lock(&mutex_journal_cons);
+
+        ft_thread_await(ecriture_journal_cons);
         int ecriture_journal = ecrire_fichier(journal, paquet->contenu);
-        //ft_mutex_unlock(&mutex_journal_cons);
+        printf("C%d a consommé %s\n", ident, paquet->contenu);
+        ft_thread_generate(ecriture_journal_cons);
+
         tapis->compt--;
         //ft_mutex_unlock(&mutex_compt);
         ft_thread_cooperate();
@@ -180,6 +189,7 @@ void messager(void* args){
 
         //vérouiller l'accès au compteur
         //ft_mutex_lock(&mutex_compt);
+        ft_thread_unlink();
         if (tapis_cons->compt == 0){
             //ft_mutex_unlock(&mutex_compt);
             break;
@@ -188,10 +198,16 @@ void messager(void* args){
         Paquet* paquet = defiler(tapis_prod);
         ft_thread_unlink();
 
+        ft_thread_await(ecriture_journal_mess);
         ecrire_fichier(journal, paquet->contenu);
+        ft_thread_generate(ecriture_journal_mess);
+
+        printf("M%d transporte %s\n", ident, paquet->contenu);
+
 
         ft_thread_link(scheduler_cons);
         enfiler(tapis_cons, paquet);
+        printf("M%d dépose %s\n", ident, paquet->contenu);
         ft_thread_unlink();       
     }
     
@@ -205,7 +221,10 @@ int main(){
     int i;
     void* status;
     char *fruits[] = {"mangue", "fraise", "framboise", "kiwi", "pomme", "banane", "lichi", "orange", "mandarine", "prune", "mure", "cassis"};
-
+    char *journal_cons = "consommateur.txt";
+    char *journal_prod = "producteur.txt";
+    char *journal_mess = "messager.txt";
+    // int c, *cell = &c;
 
     // pthread_mutex_init(&mutc, NULL);
     // pthread_cond_init(&peut_produire, NULL);
@@ -215,6 +234,17 @@ int main(){
     ft_scheduler_t scheduler_cons = ft_scheduler_create(); 
     ft_scheduler_t scheduler_prod = ft_scheduler_create(); 
 
+    ft_thread_t consommateurs[NB_CONSOMMATEURS];
+    ft_thread_t producteurs[NB_PRODUCTEURS];
+    ft_thread_t messagers[NB_MESSAGERS];
+
+    ecriture_journal_cons = ft_event_create (scheduler_cons);
+    ecriture_journal_prod = ft_event_create (scheduler_prod);
+    ecriture_journal_mess = ft_event_create (scheduler_prod);
+
+    ft_thread_generate(ecriture_journal_cons);
+    ft_thread_generate(ecriture_journal_prod);
+    ft_thread_generate(ecriture_journal_mess);
 
     Tapis * tapis_cons = malloc(sizeof(Tapis));
     tapis_cons->tete = 0;
@@ -234,8 +264,8 @@ int main(){
         args->tapis = tapis_prod;
         args->produit = fruits[i];
         args->cible = CIBLE ;
-        ft_thread_create(scheduler_prod, producteur, NULL, args);
-        printf("producteur %d crée\n", i);
+        args->journal = journal_prod ;
+        producteurs[i] = ft_thread_create(scheduler_prod, producteur, NULL, args);
     }
 
 
@@ -243,7 +273,8 @@ int main(){
         argCons * args = malloc(sizeof(argCons)); 
         args->tapis = tapis_cons;
         args-> ident = i;
-        ft_thread_create(scheduler_cons, consommateur, NULL, args);
+        args->journal = journal_cons ;
+        consommateurs[i] = ft_thread_create(scheduler_cons, consommateur, NULL, args);
     }
 
     for (int i=0; i<NB_MESSAGERS; i++){
@@ -251,17 +282,24 @@ int main(){
         args->tapis_cons = tapis_cons;
         args->tapis_prod = tapis_prod;
         args-> ident = i;
-        ft_thread_create(NULL, messager, NULL, args);
+        args->journal = journal_mess ;
+        //on lie messager au scheduler_prod par défaut, il sera retiré en début
+        messagers[i] = ft_thread_create(scheduler_prod, messager, NULL, args);
     }
 
     ft_scheduler_start(scheduler_cons);
     ft_scheduler_start(scheduler_prod);
 
-    // for (int i=0; i<NB_PRODUCTEURS; i++){
-    //     ft_thread_join(producteurs[i]);
-    // }
-    // for (int i=0; i<NB_CONSOMMATEURS; i++){
-    //     ft_thread_join(consommateurs[i]);
-    // }
+    for (int i=0; i<NB_PRODUCTEURS; i++){
+        ft_thread_join(producteurs[i]);
+    }
+    for (int i=0; i<NB_CONSOMMATEURS; i++){
+        ft_thread_join(consommateurs[i]);
+    }
+    for (int i=0; i<NB_MESSAGERS; i++){
+        ft_thread_join(messagers[i]);
+    }
+
+    ft_exit ();
 
 }
