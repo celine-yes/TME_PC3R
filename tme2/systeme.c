@@ -80,6 +80,17 @@ int ecrire_fichier(char* nom_fichier, char* texte){
     return 0;
 }
 
+int effacer_fichier(char* nom_fichier){
+    FILE *fichier = fopen(nom_fichier, "w");
+
+    if (fichier == NULL) {
+        printf("Le fichier n'a pas pu s'ouvrir correctement\n");
+        return 1; 
+    }
+    fclose(fichier);
+    return 0;
+}
+
 
 // fonction appelé par producteur
 void enfiler(Tapis* tapis, Paquet * paquet){
@@ -252,6 +263,10 @@ int main(){
     char *journal_cons = "consommateur.txt";
     char *journal_prod = "producteur.txt";
     char *journal_mess = "messager.txt";
+
+    effacer_fichier(journal_cons);
+    effacer_fichier(journal_prod);
+    effacer_fichier(journal_mess);
 
     ft_scheduler_t scheduler_cons = ft_scheduler_create(); 
     ft_scheduler_t scheduler_prod = ft_scheduler_create(); 
