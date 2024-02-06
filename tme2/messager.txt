@@ -1,0 +1,6 @@
+mangue 1
+fraise 1
+mangue 2
+fraise 2
+mangue 3
+fraise 3
