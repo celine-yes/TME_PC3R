@@ -1,6 +1,0 @@
-pomme 1
-mangue 2
-fraise 2
-framboise 2
-kiwi 2
-pomme 2
