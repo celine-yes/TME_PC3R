@@ -1,16 +1,15 @@
-SOURCE = systeme.c
-
-OUTPUT = systeme
-
 CC = gcc
 
 CFLAGS = -D_REENTRANT -I ft_v1.0/include/ -L ft_v1.0/lib/
 
-all: $(OUTPUT)
+all: systeme ancienSystem
 
-$(OUTPUT): $(SOURCE)
-	$(CC) $(CFLAGS) -o $(OUTPUT) $(SOURCE) -pthread -lfthread -v
+systeme: systeme.c
+	$(CC) $(CFLAGS) -o systeme systeme.c -pthread -lfthread
+
+ancienSystem: ancienSystem.c
+	$(CC) $(CFLAGS) -o ancienSystem ancienSystem.c -pthread -lfthread
 
 clean:
-	rm -f $(OUTPUT)
+	rm -f systeme ancienSystem
 

@@ -48,3 +48,13 @@ lichi 1
 orange 1
 mandarine 1
 prune 1
+mangue 1
+fraise 1
+framboise 1
+kiwi 1
+pomme 1
+banane 1
+lichi 1
+orange 1
+mandarine 1
+prune 1

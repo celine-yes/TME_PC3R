@@ -198,7 +198,7 @@ Paquet* defiler(Tapis* tapis) {
 
 // }
 
-void* producteur(void* args){
+void producteur(void* args){
 
     argProd* arguments = (argProd*)args;
     Tapis* tapis = arguments->tapis;
@@ -224,7 +224,7 @@ void* producteur(void* args){
 
         ft_thread_cooperate();
     }
-    return NULL;
+
 }
 
 
@@ -258,7 +258,7 @@ void* producteur(void* args){
 // }
 
 // Consommateur
-void* consommateur(void* args) {
+void consommateur(void* args) {
     
     argCons* arguments = (argCons*)args;
     Tapis* tapis = arguments->tapis;
@@ -275,11 +275,11 @@ void* consommateur(void* args) {
         tapis->compt--;
         pthread_mutex_unlock(&tapis->mutex);
     }
-    return NULL;
+
 }
 
 // Messager
-void* messager(void* args) {
+void messager(void* args) {
     argMess* arguments = (argMess*)args;
     Tapis* tapis_cons = arguments->tapis_cons;
     Tapis* tapis_prod = arguments->tapis_prod;
@@ -319,7 +319,7 @@ void* messager(void* args) {
 
         ft_thread_cooperate();
     }
-    return NULL;
+
 }
 
 // void messager(void* args){
