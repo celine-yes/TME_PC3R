@@ -1,17 +1,18 @@
 import (
     "bufio"
     "fmt"
-    "io"
-    "strconv"
+    "log"
     "os"
-	"flag"
-	"time"
+    "strconv"
+    "strings"
+    "time"
+    "flag"
 )
 
 type Paquet struct{
-	depart string
-	arrivee string 
-	arret int
+	Depart string
+	Arrivee string 
+	Arret int
 }
 
 func lecteur(nom_fichier string, c_trav chan string){
@@ -21,7 +22,7 @@ func lecteur(nom_fichier string, c_trav chan string){
 	if err != nil {
         log.Fatal(err)
     }
-    defer file.Close()
+    defer donnee.Close()
 
     scanner := bufio.NewScanner(file)
 
@@ -36,19 +37,18 @@ func lecteur(nom_fichier string, c_trav chan string){
 
 }
 
-func travailleur(c_trav chan string, c_serveur chan chan interface {}, c_reduc chan Paquet){
-	for true{
-		line := <- c_trav
+func travailleur(c_trav chan string, c_serveur chan<- chan Paquet, c_reduc chan Paquet){
+	for line := range c_trav{
 		splitline := strings.Split(line, ",")
 
 		departureTime := splitline[2]
 		arrivalTime := splitline[1]
 
 		//c_s est le canal unique entre serveur et travailleur
-		c_s := make(chan interface {})
+		c_s := make(chan Paquet)
 		c_serveur <- c_s
 		//envoi du paquet au serveur de calcul
-		c_s <- Paquet(depart : departureTime, arrivee : arrivalTime, arret:0)
+		c_s <- Paquet(Depart : departureTime, Arrivee : arrivalTime, Arret:0)
 		//attend et recupère le paquet envoyé par le serveur
 		paquet := <- c_s
 
@@ -58,16 +58,16 @@ func travailleur(c_trav chan string, c_serveur chan chan interface {}, c_reduc c
 
 }
 
-func serveur(c_serveur chan chan Paquet) {
-    for {
-        c_s := <-c_serveur
+func serveur(c_serveur <-chan chan Paquet) {
+    for c_s := range c_serveur{
+        
         paquet := <-c_s
 
         // Création d'une nouvelle goroutine pour calculer la durée de manière concurrente
-        go func(p Paquet) {
+        go func(p Paquet, c_s chan Paquet) {
             p.arret = calculerDuree(p.Arrivee, p.Depart)
             c_s <- p
-        }(paquet)
+        }(paquet, c_s)
     }
 }
 
@@ -76,7 +76,7 @@ func calculerDuree(arrive string, depart string) int{
 	int_depart, err2 := strconv.Atoi(depart)
     if err1 != nil || err2 != nil{
         fmt.Println("Erreur lors de la conversion:", err)
-        return
+        return 0
     }
 
 	return int_depart - int_arrive
@@ -108,7 +108,7 @@ func reducteur(c_reduc chan Paquet, c_fin chan int){
 }
 
 func main(){
-	c_serveur := make (chan chan interface{})
+	c_serveur := make (chan chan Paquet)
 	c_fin := make (chan int)
 	c_reduc := make (chan Paquet)
 	c_trav := make (chan string)
