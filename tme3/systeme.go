@@ -65,7 +65,6 @@ func travailleur(c_trav chan string, c_serveur chan chan Paquet, c_reduc chan Pa
         fmt.Println("travailleur envoie paquet traité au réducteur") 		
 
 	}
-
 }
 
 func serveur(c_serveur chan chan Paquet) {
@@ -85,6 +84,7 @@ func serveur(c_serveur chan chan Paquet) {
     }
 }
 
+//Pour éviter le probleme des heures dépassant 24h
 func heureVersSecondes(heure string) (int, error) {
     //fmt.Println(heure)
     parties := strings.Split(heure, ":")
@@ -107,7 +107,6 @@ func heureVersSecondes(heure string) (int, error) {
     return totalSecondes, nil
 }
 
-// Calcule la différence en secondes entre deux heures, même si elles dépassent 24h.
 func calculerDuree(arrivee, depart string) int {
     secondesArrivee, err1 := heureVersSecondes(arrivee)
     secondesDepart, err2 := heureVersSecondes(depart)
@@ -136,8 +135,7 @@ func reducteur(c_reduc chan Paquet, c_fin chan int, fin chan bool){
             fmt.Println("reducteur recoit paquet traité") 		
             compt++
             duree += paquet.Arret
-        case <-fin:
-            // Signal de fin de temps reçu, envoi de la valeur calculée au processus principal
+        case <-fin:  //signal de fin
             resultat := 0
             if compt > 0 {
                 resultat = duree / compt
@@ -160,10 +158,9 @@ func main(){
 	var tempsAttente time.Duration
     flag.DurationVar(&tempsAttente, "temps", 5*time.Second, "Temps d'attente avant la fin du temps")
 
-    // Parsing des drapeaux (flags) de la ligne de commande
     flag.Parse()
 
-    nomFichier := "stop_times.txt" // Ajuster selon le besoin
+    nomFichier := "stop_times.txt"
 
     go lecteur(nomFichier, c_trav)
     go serveur(c_serveur)
@@ -177,6 +174,8 @@ func main(){
 
     fin <- true // Signaler la fin du traitement au réducteur
     resultat := <-c_fin // Récupérer le résultat du réducteur
+
+
 
     fmt.Printf("\n\nDurée d'arrêt moyenne: %d\n", resultat)
 
