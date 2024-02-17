@@ -64,7 +64,7 @@ func personne_de_ligne(l string) st.Personne {
 }
 
 // 
-func (n int) n_eme_ligne_fichier string{
+func n_eme_ligne_fichier(n int) string{
 	file, err := os.Open(FICHIER_SOURCE)
 	if err != nil {
 		log.Fatalf("Erreur lors de l'ouverture du fichier : %v", err)
@@ -84,7 +84,7 @@ func (n int) n_eme_ligne_fichier string{
 
 // *** METHODES DE L'INTERFACE personne_int POUR LES PAQUETS DE PERSONNES ***
 
-func (p *personne_emp, cLecteur chan DemandeLecture) initialise() {
+func (p *personne_emp) initialise(cLecteur chan DemandeLecture){
 
 	//canal de canaux pour garantir que le lecteur renvoie la ligne au bon producteur
 	c_ligne := make(chan string)
@@ -287,7 +287,26 @@ func main() {
 	fintemps := make(chan int)
 	// A FAIRE
 	// creer les canaux
+	cLecteur := make(chan DemandeLecture)
+	cGestionOuvrier := make(chan personne_int)
+	cCollecteur := make(chan personne_int)
+	cGestionnaire := make(chan personne_int)
+	cProdGestion := make(chan personne_int)
+	cFin := make(chan bool)
+
 	// lancer les goroutines (parties 1 et 2): 1 lecteur, 1 collecteur, des producteurs, des gestionnaires, des ouvriers
+	go lecteur(cLecteur)
+	go collecteur(cCollecteur, cFin)
+	for i := 0; i < NB_G; i++ {
+        go gestionnaire(cGestionnaire, cGestionOuvrier, cOuvrierGestion)
+    }
+    for i := 0; i < NB_P; i++ {
+        go producteur(cGestionnaire)
+    }
+    for i := 0; i < NB_O; i++ {
+        go ouvrier(cGestionOuvrier, cCollecteur)
+    }
+	
 	// lancer les goroutines (partie 2): des producteurs distants, un proxy
 	time.Sleep(time.Duration(millis) * time.Millisecond)
 	fintemps <- 0
