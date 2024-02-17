@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strconv"
 	"time"
+	"log"
+	"bufio"
 
 	st "client/structures" // contient la structure Personne
 	tr "client/travaux" // contient les fonctions de travail sur les Personnes
@@ -73,13 +75,16 @@ func n_eme_ligne_fichier(n int) string{
 
 	scanner := bufio.NewScanner(file)
 	currentLine := 0
+	ligne := "null"
+
 	for scanner.Scan() {
 		if currentLine == n {
-			ligne := scanner.Text()
+			ligne = scanner.Text()
 			return ligne
 		}
 		currentLine++
 	}
+	return ligne
 }
 
 // *** METHODES DE L'INTERFACE personne_int POUR LES PAQUETS DE PERSONNES ***
@@ -96,8 +101,11 @@ func (p *personne_emp) initialise(cLecteur chan DemandeLecture){
 	// Initialisation des tâches
 	nbTaches := rand.Intn(5) + 1
 	p.afaire = make([]func(*st.Personne), nbTaches)
+	tache := tr.UnTravail()
 	for i := 0; i < nbTaches; i++ {
-		p.afaire[i] = tr.UnTravail
+		p.afaire[i] = func(p *st.Personne) {
+			*p = tache(*p)
+		}
 	}
 	p.statut = "R"
 }
@@ -133,11 +141,11 @@ func (p personne_dist) travaille() {
 }
 
 func (p personne_dist) vers_string() string {
-	// A FAIRE
+	return "a faire partie2"
 }
 
 func (p personne_dist) donne_statut() string {
-	// A FAIRE
+	return "a faire partie2"
 }
 
 // *** CODE DES GOROUTINES DU SYSTEME ***
@@ -153,6 +161,7 @@ func lecteur(cLecteur chan DemandeLecture) {
 	for demande := range cLecteur {
         ligne := n_eme_ligne_fichier(demande.numLigne)
         demande.cLigne <- ligne
+	}
 }
 
 // Partie 1: récupèrent des personne_int depuis les gestionnaires, font une opération dépendant de donne_statut()
@@ -203,9 +212,6 @@ func producteur(cGestionnaire chan personne_int) {
 
         // Envoyer la nouvelle personne au gestionnaire
         cGestionnaire <- &nouvellePersonne
-
-        // Attendre un peu avant de créer une nouvelle personne pour simuler un délai de production
-        time.Sleep(time.Millisecond * 500) // Exemple: attendre 500 millisecondes
     }
 }
 
