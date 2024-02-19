@@ -10,7 +10,6 @@ import (
 	"math/rand"
 	"os"
 	"regexp"
-	"strconv"
 	"time"
 )
 
@@ -49,7 +48,7 @@ type personne_int interface {
 // fabrique une personne à partir d'une ligne du fichier des conseillers municipaux
 // à changer si un autre fichier est utilisé
 func personne_de_ligne(l string) st.Personne {
-	separateur := regexp.MustCompile("\u0009") // oui, les donnees sont separees par des tabulations ... merci la Republique Francaise
+	separateur := regexp.MustCompile(",") // oui, les donnees sont separees par des tabulations ... merci la Republique Francaise
 	separation := separateur.Split(l, -1)
 	naiss, _ := time.Parse("2/1/2006", separation[7])
 	a1, _, _ := time.Now().Date()
@@ -152,7 +151,7 @@ func lecteur(n int, cLigne chan string) {
 // Si le statut est V, ils initialise le paquet de personne puis le repasse aux gestionnaires
 // Si le statut est R, ils travaille une fois sur le paquet puis le repasse aux gestionnaires
 // Si le statut est C, ils passent le paquet au collecteur
-func ouvrier(cGestionOuvrier chan personne_int, cCollecteur chan personne_int) {
+func ouvrier(cGestionOuvrier chan personne_int, cOuvrierGestion chan personne_int, cCollecteur chan personne_int) {
 	fmt.Println("Ouvrier a démarré \n")
 	for {
 		select {
@@ -161,15 +160,19 @@ func ouvrier(cGestionOuvrier chan personne_int, cCollecteur chan personne_int) {
 			switch statut {
 			case "V": //paquet vide
 				paquet.initialise()
-				cGestionOuvrier <- paquet
+				fmt.Println("Ouvrier: Paquet initialisé")
+				cOuvrierGestion <- paquet
+				fmt.Println("Ouvrier: Paquet envoyé à Gestionnaire")
 			case "R": //paquet en cours de modification
 				paquet.travaille()
-
+				fmt.Println("Ouvrier: travaille")
 				//vérifier si plus de taches
 				if paquet.donne_statut() == "C" {
 					cCollecteur <- paquet
+					fmt.Println("Ouvrier: Paquet envoyé à Collecteur")
 				} else {
 					cGestionOuvrier <- paquet
+					fmt.Println("Ouvrier: Paquet envoyé à Gestionnaire")
 				}
 			}
 		}
@@ -190,6 +193,7 @@ func producteur(cGestionnaire chan personne_int) {
 		}
 
 		// Envoyer la nouvelle personne au gestionnaire
+		//fmt.Println("Producteur: paquet vide envoyé \n")
 		cGestionnaire <- &nouvellePersonne
 	}
 }
@@ -209,28 +213,42 @@ func gestionnaire(cProdGestion chan personne_int, cGestionOuvrier chan personne_
 	var fileAttente []personne_int // File d'attente des paquets à traiter
 	fmt.Println("Gestionnaire a démarré \n")
 	for {
-		select {
-		case paquetRetour := <-cOuvrierGestion:
-			// Recevoir un nouveau paquet des ouvriers retournés
-			fileAttente = append(fileAttente, paquetRetour)
-
-		case paquetProd := <-cProdGestion:
-			// Recevoir un nouveau paquet des producteurs
-			fileAttente = append(fileAttente, paquetProd)
-		}
-
-		// Vérifier si la file d'attente est à plus de la moitié de sa capacité
-		if len(fileAttente) >= TAILLE_G/2 {
-			// Vérifier si des ouvriers sont disponibles
-			for len(fileAttente) > 0 {
+		// Essayer d'ajouter des paquets à la file d'attente si elle n'est pas pleine
+		if len(fileAttente) < TAILLE_G/2 {
+			select {
+			case paquetProd := <-cProdGestion:
+				// Nouveau paquet des producteurs
+				fmt.Println("Gestionnaire: ajout paquet vide dans file")
+				fileAttente = append(fileAttente, paquetProd)
+			default:
+				// Si aucun paquet n'est immédiatement disponible, passer à l'envoi des paquets aux ouvriers
+			}
+		} else {
+			if len(fileAttente) < TAILLE_G {
 				select {
-				case cGestionOuvrier <- fileAttente[0]:
-					// Envoyer un paquet à un ouvrier
-					fileAttente = fileAttente[1:] // Retirer le paquet de la file d'attente
+				case paquetRetour := <-cOuvrierGestion:
+					// Paquet retourné par un ouvrier
+					fmt.Println("Gestionnaire: ajout paquet traité dans file")
+					fileAttente = append(fileAttente, paquetRetour)
 				default:
-					// Aucun ouvrier disponible
 				}
 			}
+		}
+		// S'assurer que la logique d'envoi des paquets aux ouvriers fonctionne même si la file est pleine
+		if len(fileAttente) > 0 {
+			select {
+			case cGestionOuvrier <- fileAttente[0]:
+				fmt.Println("Gestionnaire: paquet envoyé à un ouvrier")
+				fileAttente = fileAttente[1:]
+			default:
+				// Si aucun ouvrier n'est disponible, introduire un court délai pour éviter une boucle serrée
+				// et donner du temps aux ouvriers de devenir disponibles
+				time.Sleep(1 * time.Millisecond)
+			}
+		} else {
+			// Si la file d'attente est vide, introduire un court délai pour éviter une consommation CPU inutile
+			// en attendant de nouveaux paquets
+			time.Sleep(1 * time.Millisecond)
 		}
 	}
 }
@@ -243,11 +261,14 @@ func collecteur(cCollecteur chan personne_int, cFin chan bool) {
 	for {
 		select {
 		case paquet := <-cCollecteur:
+			fmt.Println("Collecteur: paquet recu \n")
 			journal += paquet.vers_string() + "\n"
 		case <-cFin:
 			// Lorsque le signal de fin est reçu, imprimer le journal et sortir de la boucle
 			fmt.Println("Journal du collecteur :\n")
 			fmt.Println(journal)
+			fmt.Println("Collecteur a fini \n")
+			cFin <- true
 			return // Sortir de la fonction après avoir imprimé le journal
 		}
 	}
@@ -255,13 +276,13 @@ func collecteur(cCollecteur chan personne_int, cFin chan bool) {
 
 func main() {
 	rand.Seed(time.Now().UTC().UnixNano()) // graine pour l'aleatoire
-	if len(os.Args) < 3 {
-		fmt.Println("Format: client <port> <millisecondes d'attente>")
-		return
-	}
-	port, _ := strconv.Atoi(os.Args[1])   // utile pour la partie 2
-	millis, _ := strconv.Atoi(os.Args[2]) // duree du timeout
-	fintemps := make(chan int)
+	//if len(os.Args) < 3 {
+	//	fmt.Println("Format: client <port> <millisecondes d'attente>")
+	//	return
+	//}
+	//port, _ := strconv.Atoi(os.Args[1])   // utile pour la partie 2
+	//millis, _ := strconv.Atoi(os.Args[2]) // duree du timeout
+	//fintemps := make(chan int)
 	// A FAIRE
 	// creer les canaux
 
@@ -280,7 +301,7 @@ func main() {
 		go producteur(cProdGestion)
 	}
 	for i := 0; i < NB_O; i++ {
-		go ouvrier(cGestionOuvrier, cCollecteur)
+		go ouvrier(cGestionOuvrier, cOuvrierGestion, cCollecteur)
 	}
 
 	var tempsAttente time.Duration
@@ -290,6 +311,7 @@ func main() {
 
 	time.Sleep(tempsAttente)
 	cFin <- true
+	<-cFin
 
 	// lancer les goroutines (partie 2): des producteurs distants, un proxy
 	//time.Sleep(time.Duration(millis) * time.Millisecond)
