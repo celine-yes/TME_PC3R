@@ -8,8 +8,11 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"net"
 	"os"
 	"regexp"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -34,7 +37,7 @@ type personne_emp struct {
 
 // paquet de personne distante, pour la Partie 2, implemente l'interface personne_int
 type personne_dist struct {
-	// A FAIRE
+	id int //identifiant dans personne_serv
 }
 
 // interface des personnes manipulees par les ouvriers, les
@@ -102,27 +105,71 @@ func (p *personne_emp) donne_statut() string {
 // ces méthodes doivent appeler le proxy (aucun calcul direct)
 
 func (p personne_dist) initialise() {
-	// A FAIRE
+	response, err := proxy("initialise", p.id)
+	if err != nil {
+		fmt.Println("Erreur lors de l'initialisation de la personne_dist:", err)
+		return
+	}
+	fmt.Println("Réponse du serveur à l'initialisation:", response)
 }
 
 func (p personne_dist) travaille() {
-	// A FAIRE
+	response, err := proxy("travaille", p.id)
+	if err != nil {
+		fmt.Println("Erreur lors du travail sur la personne_dist:", err)
+		return
+	}
+	fmt.Println("Réponse du serveur au travail:", response)
 }
 
 func (p personne_dist) vers_string() string {
-	return "a faire partie2"
+	response, err := proxy("vers_string", p.id)
+	if err != nil {
+		fmt.Println("Erreur lors de la demande de vers_string à la personne_dist:", err)
+		return "Erreur"
+	}
+	return response
 }
 
 func (p personne_dist) donne_statut() string {
-	return "a faire partie2"
+	response, err := proxy("donne_statut", p.id)
+	if err != nil {
+		fmt.Println("Erreur lors de la demande de statut pour la personne_dist:", err)
+		return "Erreur"
+	}
+	return response
 }
 
 // *** CODE DES GOROUTINES DU SYSTEME ***
 
 // Partie 2: contacté par les méthodes de personne_dist, le proxy appelle la méthode à travers le réseau et récupère le résultat
 // il doit utiliser une connection TCP sur le port donné en ligne de commande
-func proxy() {
-	// A FAIRE
+func proxy(methodName string, personID int) (string, error) {
+	// Récupérer l'adresse du serveur et le port depuis des variables ou les arguments de ligne de commande
+	serverAddr := "localhost" // Utiliser ADRESSE pour une valeur réelle ou passer comme argument
+	serverPort := "12345"     // Supposer que le port est passé en argument ou défini globalement
+
+	// Établir une connexion TCP avec le serveur
+	conn, err := net.Dial("tcp", serverAddr+":"+serverPort)
+	if err != nil {
+		return "", fmt.Errorf("failed to connect to server: %v", err)
+	}
+	defer conn.Close()
+
+	// Envoyer la requête au serveur
+	request := fmt.Sprintf("%s %d", methodName, personID)
+	_, err = conn.Write([]byte(request + "\n"))
+	if err != nil {
+		return "", fmt.Errorf("failed to send request: %v", err)
+	}
+
+	// Lire la réponse du serveur
+	response, err := bufio.NewReader(conn).ReadString('\n')
+	if err != nil {
+		return "", fmt.Errorf("failed to read response: %v", err)
+	}
+
+	return strings.TrimSpace(response), nil
 }
 
 // Partie 1 : contacté par la méthode initialise() de personne_emp, récupère une ligne donnée dans le fichier source
@@ -202,7 +249,17 @@ func producteur(cGestionnaire chan personne_int) {
 // utilisé pour retrouver l'object sur le serveur
 // la creation sur le client d'une personne_dist doit declencher la creation sur le serveur d'une "vraie" personne, initialement vide, de statut V
 func producteur_distant() {
-	// A FAIRE
+	// Générer un ID unique pour la démonstration; dans une application réelle, cela pourrait être plus complexe
+	uniqueID := rand.Int() // Supposer l'importation de "math/rand"
+
+	// Appeler le proxy pour créer une nouvelle personne_dist sur le serveur
+	response, err := proxy("creer", uniqueID)
+	if err != nil {
+		fmt.Println("Erreur lors de la création d'une personne_dist:", err)
+		return
+	}
+
+	fmt.Println("Réponse du serveur à la création:", response)
 }
 
 // Partie 1: les gestionnaires recoivent des personne_int des producteurs et des ouvriers et maintiennent chacun une file de personne_int
@@ -276,13 +333,13 @@ func collecteur(cCollecteur chan personne_int, cFin chan bool) {
 
 func main() {
 	rand.Seed(time.Now().UTC().UnixNano()) // graine pour l'aleatoire
-	//if len(os.Args) < 3 {
-	//	fmt.Println("Format: client <port> <millisecondes d'attente>")
-	//	return
-	//}
-	//port, _ := strconv.Atoi(os.Args[1])   // utile pour la partie 2
-	//millis, _ := strconv.Atoi(os.Args[2]) // duree du timeout
-	//fintemps := make(chan int)
+	if len(os.Args) < 3 {
+		fmt.Println("Format: client <port> <millisecondes d'attente>")
+		return
+	}
+	port, _ := strconv.Atoi(os.Args[1])   // utile pour la partie 2
+	millis, _ := strconv.Atoi(os.Args[2]) // duree du timeout
+	fintemps := make(chan int)
 	// A FAIRE
 	// creer les canaux
 
