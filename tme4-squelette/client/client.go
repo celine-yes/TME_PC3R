@@ -1,17 +1,17 @@
 package main
 
 import (
+	"bufio"
+	st "client/structures" // contient la structure Personne
+	tr "client/travaux"    // contient les fonctions de travail sur les Personnes
+	"flag"
 	"fmt"
+	"log"
 	"math/rand"
 	"os"
 	"regexp"
 	"strconv"
 	"time"
-	"log"
-	"bufio"
-
-	st "client/structures" // contient la structure Personne
-	tr "client/travaux" // contient les fonctions de travail sur les Personnes
 )
 
 var ADRESSE string = "localhost"                           // adresse de base pour la Partie 2
@@ -28,7 +28,7 @@ var pers_vide = st.Personne{Nom: "", Prenom: "", Age: 0, Sexe: "M"} // une perso
 // paquet de personne, sur lequel on peut travailler, implemente l'interface personne_int
 type personne_emp struct {
 	personne st.Personne
-	ligne int
+	ligne    int
 	afaire   []func(*st.Personne)
 	statut   string //"V" à l'initialisation?, "R" ou "C"
 }
@@ -46,13 +46,6 @@ type personne_int interface {
 	donne_statut() string // renvoie V, R ou C
 }
 
-//paquet entre lecteur et producteur
-type DemandeLecture struct {
-    numLigne int
-    cLigne chan string
-}
-
-
 // fabrique une personne à partir d'une ligne du fichier des conseillers municipaux
 // à changer si un autre fichier est utilisé
 func personne_de_ligne(l string) st.Personne {
@@ -65,36 +58,13 @@ func personne_de_ligne(l string) st.Personne {
 	return st.Personne{Nom: separation[4], Prenom: separation[5], Sexe: separation[6], Age: agec}
 }
 
-// 
-func n_eme_ligne_fichier(n int) string{
-	file, err := os.Open(FICHIER_SOURCE)
-	if err != nil {
-		log.Fatalf("Erreur lors de l'ouverture du fichier : %v", err)
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	currentLine := 0
-	ligne := "null"
-
-	for scanner.Scan() {
-		if currentLine == n {
-			ligne = scanner.Text()
-			return ligne
-		}
-		currentLine++
-	}
-	return ligne
-}
-
 // *** METHODES DE L'INTERFACE personne_int POUR LES PAQUETS DE PERSONNES ***
 
-func (p *personne_emp) initialise(cLecteur chan DemandeLecture){
-
-	//canal de canaux pour garantir que le lecteur renvoie la ligne au bon producteur
-	c_ligne := make(chan string)
-	cLecteur <- DemandeLecture{numLigne: p.ligne, cLigne: c_ligne}
-	ligne := <- c_ligne
+func (p *personne_emp) initialise() {
+	//création d'un canal pour chaque initialise pour avoir la bonne ligne
+	cLigne := make(chan string)
+	go lecteur(p.ligne, cLigne)
+	ligne := <-cLigne
 
 	p.personne = personne_de_ligne(ligne)
 
@@ -157,11 +127,25 @@ func proxy() {
 }
 
 // Partie 1 : contacté par la méthode initialise() de personne_emp, récupère une ligne donnée dans le fichier source
-func lecteur(cLecteur chan DemandeLecture) {
-	for demande := range cLecteur {
-        ligne := n_eme_ligne_fichier(demande.numLigne)
-        demande.cLigne <- ligne
+func lecteur(n int, cLigne chan string) {
+
+	file, err := os.Open(FICHIER_SOURCE)
+	if err != nil {
+		log.Fatalf("Erreur lors de l'ouverture du fichier : %v", err)
 	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	currentLine := 0
+	ligne := "null"
+
+	for scanner.Scan() {
+		if currentLine == n {
+			ligne = scanner.Text()
+		}
+		currentLine++
+	}
+	cLigne <- ligne
 }
 
 // Partie 1: récupèrent des personne_int depuis les gestionnaires, font une opération dépendant de donne_statut()
@@ -169,26 +153,22 @@ func lecteur(cLecteur chan DemandeLecture) {
 // Si le statut est R, ils travaille une fois sur le paquet puis le repasse aux gestionnaires
 // Si le statut est C, ils passent le paquet au collecteur
 func ouvrier(cGestionOuvrier chan personne_int, cCollecteur chan personne_int) {
+	fmt.Println("Ouvrier a démarré \n")
 	for {
 		select {
 		case paquet := <-cGestionOuvrier:
-			// Traiter le paquet
 			statut := paquet.donne_statut()
 			switch statut {
-			case "V":
-				// Le paquet est vide, il faut l'initialiser
+			case "V": //paquet vide
 				paquet.initialise()
-				// Une fois initialisé, renvoyer au gestionnaire pour plus de traitement
 				cGestionOuvrier <- paquet
-			case "R":
-				// Le paquet est en cours de modification, effectuer une tâche
+			case "R": //paquet en cours de modification
 				paquet.travaille()
-				// Vérifier à nouveau le statut après le travail
+
+				//vérifier si plus de taches
 				if paquet.donne_statut() == "C" {
-					// Si le travail est terminé, envoyer au collecteur
 					cCollecteur <- paquet
 				} else {
-					// Sinon, renvoyer au gestionnaire pour plus de travail
 					cGestionOuvrier <- paquet
 				}
 			}
@@ -196,23 +176,22 @@ func ouvrier(cGestionOuvrier chan personne_int, cCollecteur chan personne_int) {
 	}
 }
 
-
 // Partie 1: les producteurs cree des personne_int implementees par des personne_emp initialement vides,
 // de statut V mais contenant un numéro de ligne (pour etre initialisee depuis le fichier texte)
 // la personne est passée aux gestionnaires
 func producteur(cGestionnaire chan personne_int) {
-    for {
-        // Créer une nouvelle personne_emp initialement vide
-        nouvellePersonne := personne_emp{
-            personne: st.Personne{Nom: "", Prenom: "", Age: 0, Sexe: "M"}, // Utiliser pers_vide si vous préférez
-            ligne:    rand.Intn(TAILLE_SOURCE) + 1, // Générer un numéro de ligne aléatoire
-            afaire:   nil, // Pas de tâches assignées initialement
-            statut:   "V", // Statut initial à "V"
-        }
+	fmt.Println("Producteur a démarré \n")
+	for {
+		nouvellePersonne := personne_emp{
+			personne: st.Personne{Nom: "", Prenom: "", Age: 0, Sexe: "M"}, // Utiliser pers_vide si vous préférez
+			ligne:    rand.Intn(TAILLE_SOURCE) + 1,                        // Générer un numéro de ligne aléatoire
+			afaire:   nil,                                                 // Pas de tâches assignées initialement
+			statut:   "V",                                                 // Statut initial à "V"
+		}
 
-        // Envoyer la nouvelle personne au gestionnaire
-        cGestionnaire <- &nouvellePersonne
-    }
+		// Envoyer la nouvelle personne au gestionnaire
+		cGestionnaire <- &nouvellePersonne
+	}
 }
 
 // Partie 2: les producteurs distants cree des personne_int implementees par des personne_dist qui contiennent un identifiant unique
@@ -227,60 +206,52 @@ func producteur_distant() {
 // ATTENTION: la famine des ouvriers doit être évitée: si les producteurs inondent les gestionnaires de paquets, les ouvrier ne pourront
 // plus rendre les paquets surlesquels ils travaillent pour en prendre des autres
 func gestionnaire(cProdGestion chan personne_int, cGestionOuvrier chan personne_int, cOuvrierGestion chan personne_int) {
-    var fileAttente []personne_int // File d'attente des paquets à traiter
+	var fileAttente []personne_int // File d'attente des paquets à traiter
+	fmt.Println("Gestionnaire a démarré \n")
+	for {
+		select {
+		case paquetRetour := <-cOuvrierGestion:
+			// Recevoir un nouveau paquet des ouvriers retournés
+			fileAttente = append(fileAttente, paquetRetour)
 
-    for {
-        // Vérifier si on doit prioriser les paquets retournés par les ouvriers
-        if len(fileAttente) >= seuilPriorite {
-            select {
-            case paquetRetour := <-cOuvrierGestion:
-                // Traiter immédiatement le paquet retourné par l'ouvrier
-                // Ici, vous pourriez vouloir le renvoyer à un ouvrier ou le traiter différemment selon votre logique
-                continue
-            default:
-                // Continuer la logique normale si aucun paquet n'est retourné par un ouvrier
-            }
-        }
+		case paquetProd := <-cProdGestion:
+			// Recevoir un nouveau paquet des producteurs
+			fileAttente = append(fileAttente, paquetProd)
+		}
 
-        select {
-        case paquetProd := <-cProdGestion:
-            // Recevoir un nouveau paquet des producteurs
-            if len(fileAttente) < TAILLE_G {
-                fileAttente = append(fileAttente, paquetProd)
-            }
-            // Ici, vous pourriez avoir une logique pour traiter/envoyer un paquet de fileAttente à un ouvrier
-        case paquetRetour := <-cOuvrierGestion:
-            // Traiter le paquet retourné par l'ouvrier
-            // Cette logique pourrait être similaire ou différente de celle du bloc 'if' ci-dessus
-        }
-
-        // Ajouter ici la logique pour envoyer des paquets de fileAttente à des ouvriers
-        // Peut-être en vérifiant si des ouvriers sont disponibles et en envoyant des paquets un par un
-    }
+		// Vérifier si la file d'attente est à plus de la moitié de sa capacité
+		if len(fileAttente) >= TAILLE_G/2 {
+			// Vérifier si des ouvriers sont disponibles
+			for len(fileAttente) > 0 {
+				select {
+				case cGestionOuvrier <- fileAttente[0]:
+					// Envoyer un paquet à un ouvrier
+					fileAttente = fileAttente[1:] // Retirer le paquet de la file d'attente
+				default:
+					// Aucun ouvrier disponible
+				}
+			}
+		}
+	}
 }
 
 // Partie 1: le collecteur recoit des personne_int dont le statut est c, il les collecte dans un journal
 // quand il recoit un signal de fin du temps, il imprime son journal.
 func collecteur(cCollecteur chan personne_int, cFin chan bool) {
-    journal := "" // Initialiser le journal comme une chaîne vide
-
-    for {
-        select {
-        case paquet := <-cCollecteur:
-            // Vérifier si le paquet est terminé (C)
-            if paquet.donne_statut() == "C" {
-                // Ajouter le contenu du paquet au journal
-                journal += paquet.vers_string() + "\n"
-            }
-        case <-cFin:
-            // Lorsque le signal de fin est reçu, imprimer le journal et sortir de la boucle
-            fmt.Println("Journal du collecteur :")
-            fmt.Println(journal)
-            return // Sortir de la fonction après avoir imprimé le journal
-        }
-    }
+	journal := "" // Initialiser le journal comme une chaîne vide
+	fmt.Println("Collecteur a démarré \n")
+	for {
+		select {
+		case paquet := <-cCollecteur:
+			journal += paquet.vers_string() + "\n"
+		case <-cFin:
+			// Lorsque le signal de fin est reçu, imprimer le journal et sortir de la boucle
+			fmt.Println("Journal du collecteur :\n")
+			fmt.Println(journal)
+			return // Sortir de la fonction après avoir imprimé le journal
+		}
+	}
 }
-
 
 func main() {
 	rand.Seed(time.Now().UTC().UnixNano()) // graine pour l'aleatoire
@@ -288,33 +259,40 @@ func main() {
 		fmt.Println("Format: client <port> <millisecondes d'attente>")
 		return
 	}
-	port, _ := strconv.Atoi(os.Args[1]) // utile pour la partie 2
-	millis, _ := strconv.Atoi(os.Args[2]) // duree du timeout 
+	port, _ := strconv.Atoi(os.Args[1])   // utile pour la partie 2
+	millis, _ := strconv.Atoi(os.Args[2]) // duree du timeout
 	fintemps := make(chan int)
 	// A FAIRE
 	// creer les canaux
-	cLecteur := make(chan DemandeLecture)
-	cGestionOuvrier := make(chan personne_int)
-	cCollecteur := make(chan personne_int)
-	cGestionnaire := make(chan personne_int)
+
 	cProdGestion := make(chan personne_int)
+	cCollecteur := make(chan personne_int)
+	cGestionOuvrier := make(chan personne_int)
+	cOuvrierGestion := make(chan personne_int)
 	cFin := make(chan bool)
 
 	// lancer les goroutines (parties 1 et 2): 1 lecteur, 1 collecteur, des producteurs, des gestionnaires, des ouvriers
-	go lecteur(cLecteur)
 	go collecteur(cCollecteur, cFin)
 	for i := 0; i < NB_G; i++ {
-        go gestionnaire(cGestionnaire, cGestionOuvrier, cOuvrierGestion)
-    }
-    for i := 0; i < NB_P; i++ {
-        go producteur(cGestionnaire)
-    }
-    for i := 0; i < NB_O; i++ {
-        go ouvrier(cGestionOuvrier, cCollecteur)
-    }
-	
+		go gestionnaire(cProdGestion, cGestionOuvrier, cOuvrierGestion)
+	}
+	for i := 0; i < NB_P; i++ {
+		go producteur(cProdGestion)
+	}
+	for i := 0; i < NB_O; i++ {
+		go ouvrier(cGestionOuvrier, cCollecteur)
+	}
+
+	var tempsAttente time.Duration
+	flag.DurationVar(&tempsAttente, "temps", 5*time.Second, "Temps d'attente avant la fin du temps")
+
+	flag.Parse()
+
+	time.Sleep(tempsAttente)
+	cFin <- true
+
 	// lancer les goroutines (partie 2): des producteurs distants, un proxy
-	time.Sleep(time.Duration(millis) * time.Millisecond)
-	fintemps <- 0
-	<-fintemps
+	//time.Sleep(time.Duration(millis) * time.Millisecond)
+	//fintemps <- 0
+	//<-fintemps
 }
