@@ -65,7 +65,7 @@ func personne_de_ligne(l string) st.Personne {
 func (p *personne_emp) initialise() {
 	//création d'un canal pour chaque initialise pour avoir la bonne ligne
 	cLigne := make(chan string)
-	go lecteur(p.ligne, cLigne)
+	go lecteur(p.ligne, cLigne) //goroutine lectrice 
 	ligne := <-cLigne
 
 	p.personne = personne_de_ligne(ligne)
@@ -73,8 +73,9 @@ func (p *personne_emp) initialise() {
 	// Initialisation des tâches
 	nbTaches := rand.Intn(5) + 1
 	p.afaire = make([]func(*st.Personne), nbTaches)
-	tache := tr.UnTravail()
 	for i := 0; i < nbTaches; i++ {
+		//fonction de travail
+		tache := tr.UnTravail()
 		p.afaire[i] = func(p *st.Personne) {
 			*p = tache(*p)
 		}
@@ -85,6 +86,7 @@ func (p *personne_emp) initialise() {
 func (p *personne_emp) travaille() {
 	if len(p.afaire) > 0 {
 		tache := p.afaire[0]
+		//applique à la personne la fonction de travail
 		tache(&p.personne)
 		p.afaire = p.afaire[1:] // Supprime la tâche réalisée
 	}
@@ -146,8 +148,8 @@ func (p personne_dist) donne_statut() string {
 // il doit utiliser une connection TCP sur le port donné en ligne de commande
 func proxy(methodName string, personID int) (string, error) {
 	// Récupérer l'adresse du serveur et le port depuis des variables ou les arguments de ligne de commande
-	serverAddr := "localhost" // Utiliser ADRESSE pour une valeur réelle ou passer comme argument
-	serverPort := "12345"     // Supposer que le port est passé en argument ou défini globalement
+	serverAddr := ADRESSE
+	serverPort := "12345"
 
 	// Établir une connexion TCP avec le serveur
 	conn, err := net.Dial("tcp", serverAddr+":"+serverPort)
@@ -213,14 +215,17 @@ func ouvrier(cGestionOuvrier chan personne_int, cOuvrierGestion chan personne_in
 			case "R": //paquet en cours de modification
 				paquet.travaille()
 				fmt.Println("Ouvrier: travaille")
-				//vérifier si plus de taches
-				if paquet.donne_statut() == "C" {
-					cCollecteur <- paquet
-					fmt.Println("Ouvrier: Paquet envoyé à Collecteur")
-				} else {
-					cGestionOuvrier <- paquet
-					fmt.Println("Ouvrier: Paquet envoyé à Gestionnaire")
-				}
+				// //vérifier si plus de taches
+				// if paquet.donne_statut() == "C" {
+				// 	cCollecteur <- paquet
+				// 	fmt.Println("Ouvrier: Paquet envoyé à Collecteur")
+				// } else {
+				cGestionOuvrier <- paquet
+				fmt.Println("Ouvrier: Paquet envoyé à Gestionnaire")
+				// }
+			case "C":
+				cCollecteur <- paquet
+				fmt.Println("Ouvrier: Paquet envoyé à Collecteur")
 			}
 		}
 	}
@@ -340,9 +345,8 @@ func main() {
 	port, _ := strconv.Atoi(os.Args[1])   // utile pour la partie 2
 	millis, _ := strconv.Atoi(os.Args[2]) // duree du timeout
 	fintemps := make(chan int)
-	// A FAIRE
-	// creer les canaux
 
+	//les canaux
 	cProdGestion := make(chan personne_int)
 	cCollecteur := make(chan personne_int)
 	cGestionOuvrier := make(chan personne_int)
@@ -365,12 +369,14 @@ func main() {
 	flag.DurationVar(&tempsAttente, "temps", 5*time.Second, "Temps d'attente avant la fin du temps")
 
 	flag.Parse()
+	// lancer les goroutines (partie 2): des producteurs distants, un proxy
+	for i := 0; i < NB_PD; i++ {
+		go producteur_distant()
+	}
 
 	time.Sleep(tempsAttente)
 	cFin <- true
 	<-cFin
-
-	// lancer les goroutines (partie 2): des producteurs distants, un proxy
 	//time.Sleep(time.Duration(millis) * time.Millisecond)
 	//fintemps <- 0
 	//<-fintemps

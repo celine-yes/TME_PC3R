@@ -9,20 +9,42 @@ import (
 // *** LISTES DE FONCTION DE TRAVAIL DE Personne DANS Personne DU SERVEUR ***
 // Essayer de trouver des fonctions *différentes* de celles du client
 
+//Change le prenom
 func f1(p st.Personne) st.Personne {
-	// A FAIRE
+	np := p
+	if np.Sexe == "M" {
+		np.Prenom = "Serv_" + p.Prenom
+	} else {
+		np.Prenom = "Serv_" + p.Prenom
+	}
+	return np
 }
 
+//Incrémente l'âge de 5
 func f2(p st.Personne) st.Personne {
-	// A FAIRE
+	np := p
+	np.Age = np.Age + 5
+	return np
 }
 
+// Change le nom
 func f3(p st.Personne) st.Personne {
-	// A FAIRE
+	np := p
+	nom := p.Nom + "_serv" 
+	np.Nom = nom
+	return np
+	
 }
 
+//Change le code sexe
 func f4(p st.Personne) st.Personne {
-	// A FAIRE
+	np := p
+	if p.Sexe == "M" {
+		np.Sexe = "F_serv"
+	} else {
+		np.Sexe = "M_serv"
+	}
+	return np
 }
 
 func UnTravail() func(st.Personne) st.Personne {
