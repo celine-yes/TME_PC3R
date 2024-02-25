@@ -4,7 +4,6 @@ import (
 	"bufio"
 	st "client/structures" // contient la structure Personne
 	tr "client/travaux"    // contient les fonctions de travail sur les Personnes
-	"flag"
 	"fmt"
 	"log"
 	"math/rand"
@@ -65,7 +64,7 @@ func personne_de_ligne(l string) st.Personne {
 func (p *personne_emp) initialise() {
 	//création d'un canal pour chaque initialise pour avoir la bonne ligne
 	cLigne := make(chan string)
-	go lecteur(p.ligne, cLigne) //goroutine lectrice 
+	go lecteur(p.ligne, cLigne) //goroutine lectrice
 	ligne := <-cLigne
 
 	p.personne = personne_de_ligne(ligne)
@@ -146,13 +145,12 @@ func (p personne_dist) donne_statut() string {
 
 // Partie 2: contacté par les méthodes de personne_dist, le proxy appelle la méthode à travers le réseau et récupère le résultat
 // il doit utiliser une connection TCP sur le port donné en ligne de commande
-func proxy(methodName string, personID int) (string, error) {
+func proxy(methodName string, personID int, port int) (string, error) {
 	// Récupérer l'adresse du serveur et le port depuis des variables ou les arguments de ligne de commande
-	serverAddr := ADRESSE
-	serverPort := "12345"
+	portStr := strconv.Itoa(port)
 
 	// Établir une connexion TCP avec le serveur
-	conn, err := net.Dial("tcp", serverAddr+":"+serverPort)
+	conn, err := net.Dial("tcp", ADRESSE+":"+portStr)
 	if err != nil {
 		return "", fmt.Errorf("failed to connect to server: %v", err)
 	}
@@ -253,7 +251,7 @@ func producteur(cGestionnaire chan personne_int) {
 // Partie 2: les producteurs distants cree des personne_int implementees par des personne_dist qui contiennent un identifiant unique
 // utilisé pour retrouver l'object sur le serveur
 // la creation sur le client d'une personne_dist doit declencher la creation sur le serveur d'une "vraie" personne, initialement vide, de statut V
-func producteur_distant() {
+func producteur_distant(port int) {
 	// Générer un ID unique pour la démonstration; dans une application réelle, cela pourrait être plus complexe
 	uniqueID := rand.Int() // Supposer l'importation de "math/rand"
 
@@ -317,7 +315,7 @@ func gestionnaire(cProdGestion chan personne_int, cGestionOuvrier chan personne_
 
 // Partie 1: le collecteur recoit des personne_int dont le statut est c, il les collecte dans un journal
 // quand il recoit un signal de fin du temps, il imprime son journal.
-func collecteur(cCollecteur chan personne_int, cFin chan bool) {
+func collecteur(cCollecteur chan personne_int, cFin chan int) {
 	journal := "" // Initialiser le journal comme une chaîne vide
 	fmt.Println("Collecteur a démarré \n")
 	for {
@@ -330,7 +328,7 @@ func collecteur(cCollecteur chan personne_int, cFin chan bool) {
 			fmt.Println("Journal du collecteur :\n")
 			fmt.Println(journal)
 			fmt.Println("Collecteur a fini \n")
-			cFin <- true
+			cFin <- 0
 			return // Sortir de la fonction après avoir imprimé le journal
 		}
 	}
@@ -351,10 +349,9 @@ func main() {
 	cCollecteur := make(chan personne_int)
 	cGestionOuvrier := make(chan personne_int)
 	cOuvrierGestion := make(chan personne_int)
-	cFin := make(chan bool)
 
 	// lancer les goroutines (parties 1 et 2): 1 lecteur, 1 collecteur, des producteurs, des gestionnaires, des ouvriers
-	go collecteur(cCollecteur, cFin)
+	go collecteur(cCollecteur, fintemps)
 	for i := 0; i < NB_G; i++ {
 		go gestionnaire(cProdGestion, cGestionOuvrier, cOuvrierGestion)
 	}
@@ -365,19 +362,14 @@ func main() {
 		go ouvrier(cGestionOuvrier, cOuvrierGestion, cCollecteur)
 	}
 
-	var tempsAttente time.Duration
-	flag.DurationVar(&tempsAttente, "temps", 5*time.Second, "Temps d'attente avant la fin du temps")
-
-	flag.Parse()
 	// lancer les goroutines (partie 2): des producteurs distants, un proxy
+	go proxy()
+
 	for i := 0; i < NB_PD; i++ {
-		go producteur_distant()
+		go producteur_distant(port)
 	}
 
-	time.Sleep(tempsAttente)
-	cFin <- true
-	<-cFin
-	//time.Sleep(time.Duration(millis) * time.Millisecond)
-	//fintemps <- 0
-	//<-fintemps
+	time.Sleep(time.Duration(millis) * time.Millisecond)
+	fintemps <- 0
+	<-fintemps
 }
