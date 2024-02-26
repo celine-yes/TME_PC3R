@@ -3,7 +3,7 @@ package travaux
 import (
 	"math/rand"
 
-	st "tme4/client/structures"
+	st "serveur/structures"
 )
 
 // *** LISTES DE FONCTION DE TRAVAIL DE Personne DANS Personne DU SERVEUR ***

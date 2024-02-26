@@ -1,3 +1,3 @@
-module tme4-squelette
+module serveur
 
 go 1.22.0

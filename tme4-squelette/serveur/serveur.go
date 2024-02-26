@@ -10,7 +10,7 @@ import (
 
 	tr "serveur/travaux"
 
-	st "tme4/client/structures"
+	st "serveur/structures"
 )
 
 var ADRESSE = "localhost"
@@ -45,7 +45,7 @@ func creer(id int) *personne_serv {
 	p := &personne_serv{
 		id:       dernierID,
 		personne: pers_vide,
-		afaire : make([]func(*st.Personne), 0)
+		afaire : make([]func(*st.Personne), 0),
 		statut:   "V",
 	}
 	personnes[dernierID] = p
@@ -97,28 +97,38 @@ func (p *personne_serv) donne_statut() string {
 // et il appelle la méthode correspondante de la personne_serv correspondante
 func mainteneur(cRequetes chan requete) {
 	for req := range cRequetes {
-		if personne, ok := personnes[req.id]; ok {
-			switch req.methode {
-			case "creer":
-				creer(req.id)
-				req.response <- "Personne créée avec succès"
-			case "initialise":
+		switch req.methode {
+		case "creer":
+			p := creer(req.id)
+			req.response <- fmt.Sprintf("Personne créée avec succès. ID: %d", p.id)
+		case "initialise":
+			if personne, ok := personnes[req.id]; ok {
 				personne.initialise()
 				req.response <- "Initialisé"
-			case "travaille":
+			} else {
+				req.response <- fmt.Sprintf("Personne avec ID %d non trouvée", req.id)
+			}
+		case "travaille":
+			if personne, ok := personnes[req.id]; ok {
 				personne.travaille()
 				req.response <- "Travail terminé"
-			case "vers_string":
-				resultat := personne.vers_string()
-				req.response <- resultat
-			case "donne_statut":
-				statut := personne.donne_statut()
-				req.response <- statut
-			default:
-				req.response <- "Méthode inconnue"
+			} else {
+				req.response <- fmt.Sprintf("Personne avec ID %d non trouvée", req.id)
 			}
-		} else {
-			req.response <- fmt.Sprintf("Personne avec ID %d non trouvée", act.id)
+		case "vers_string":
+			if personne, ok := personnes[req.id]; ok {
+				req.response <- personne.vers_string()
+			} else {
+				req.response <- fmt.Sprintf("Personne avec ID %d non trouvée", req.id)
+			}
+		case "donne_statut":
+			if personne, ok := personnes[req.id]; ok {
+				req.response <- personne.donne_statut()
+			} else {
+				req.response <- fmt.Sprintf("Personne avec ID %d non trouvée", req.id)
+			}
+		default:
+			req.response <- "Méthode inconnue"
 		}
 		close(req.response)
 	}
@@ -185,7 +195,7 @@ func main() {
 		return
 	}
 	port, _ := strconv.Atoi(os.Args[1])
-	addr := ADRESSE + ":" + fmt.Sprint(port)
+	//addr := ADRESSE + ":" + fmt.Sprint(port)
 
 	//canal pour recevoir les requêtes
 	cRequetes := make(chan requete)
@@ -194,7 +204,7 @@ func main() {
 	// Créer un serveur TCP écoutant sur le port spécifié
 	listener, err := net.Listen("tcp", ":"+strconv.Itoa(port))
 	if err != nil {
-		return fmt.Errorf("failed to start server: %v", err)
+		fmt.Errorf("failed to start server: %v", err)
 	}
 	defer listener.Close()
 

@@ -135,13 +135,6 @@ func (p personne_dist) initialise() {
 }
 
 func (p personne_dist) travaille() {
-	// response, err := proxy("travaille", p.id)
-	// if err != nil {
-	// 	fmt.Println("Erreur lors du travail sur la personne_dist:", err)
-	// 	return
-	// }
-	// fmt.Println("Réponse du serveur au travail:", response)
-
 
 	serveurResponse := make(chan string)
 	request := requete{
@@ -157,12 +150,6 @@ func (p personne_dist) travaille() {
 }
 
 func (p personne_dist) vers_string() string {
-	// response, err := proxy("vers_string", p.id)
-	// if err != nil {
-	// 	fmt.Println("Erreur lors de la demande de vers_string à la personne_dist:", err)
-	// 	return "Erreur"
-	// }
-	// return response
 
 	serveurResponse := make(chan string)
 	request := requete{
@@ -175,12 +162,6 @@ func (p personne_dist) vers_string() string {
 }
 
 func (p personne_dist) donne_statut() string {
-	// response, err := proxy("donne_statut", p.id)
-	// if err != nil {
-	// 	fmt.Println("Erreur lors de la demande de statut pour la personne_dist:", err)
-	// 	return "Erreur"
-	// }
-	// return response
 
 	serveurResponse := make(chan string)
 	request := requete{
@@ -307,29 +288,29 @@ func producteur(cGestionnaire chan personne_int) {
 // Partie 2: les producteurs distants cree des personne_int implementees par des personne_dist qui contiennent un identifiant unique
 // utilisé pour retrouver l'object sur le serveur
 // la creation sur le client d'une personne_dist doit declencher la creation sur le serveur d'une "vraie" personne, initialement vide, de statut V
-func producteur_distant(cProxy chan requete) {
-	// response, err := proxy("creer", uniqueID)
-	// if err != nil {
-	// 	fmt.Println("Erreur lors de la création d'une personne_dist:", err)
-	// 	return
-	// }
+func producteur_distant(cProxy chan requete, cGestionnaire chan personne_int) {
 
-	// fmt.Println("Réponse du serveur à la création:", response)
-	
-	// Générer un ID unique pour la démonstration; dans une application réelle, cela pourrait être plus complexe
-	uniqueID := rand.Int() // Supposer l'importation de "math/rand"
+	for{
+		// Générer un ID unique pour la démonstration; dans une application réelle, cela pourrait être plus complexe
+		uniqueID := rand.Int() // Supposer l'importation de "math/rand"
+		nouvellePersonneDist := personne_dist{
+			id : uniqueID,
+			cProxy : cProxy,
+		}
 
-	serveurResponse := make(chan string)
-	request := requete{
-		id : uniqueID,
-		methode : "creer",
-		response : serveurResponse,
+		serveurResponse := make(chan string)
+		request := requete{
+			id : uniqueID,
+			methode : "creer",
+			response : serveurResponse,
+		}
+		// envoyer message au proxy pour créer une nouvelle personne_dist sur le serveur
+		cProxy <- request
+		// Attendre la réponse du serveur
+		res := <-serveurResponse
+		fmt.Println("Réponse du serveur à la création:", res)
+		cGestionnaire <- nouvellePersonneDist
 	}
-	// envoyer message au proxy pour créer une nouvelle personne_dist sur le serveur
-	cProxy <- request
-	// Attendre la réponse du serveur
-	res := <-serveurResponse
-	fmt.Println("Réponse du serveur à la création:", res)
 }
 
 // Partie 1: les gestionnaires recoivent des personne_int des producteurs et des ouvriers et maintiennent chacun une file de personne_int
@@ -433,7 +414,7 @@ func main() {
 	// lancer les goroutines (partie 2): des producteurs distants, un proxy
 	go proxy(cProxy, port)
 	for i := 0; i < NB_PD; i++ {
-		go producteur_distant(cProxy)
+		go producteur_distant(cProxy, cProdGestion )
 	}
 
 	time.Sleep(time.Duration(millis) * time.Millisecond)
