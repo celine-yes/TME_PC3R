@@ -10,7 +10,7 @@ import (
 
 	tr "serveur/travaux"
 
-	st "../client/structures"
+	st "tme4/client/structures"
 )
 
 var ADRESSE = "localhost"
@@ -45,6 +45,7 @@ func creer(id int) *personne_serv {
 	p := &personne_serv{
 		id:       dernierID,
 		personne: pers_vide,
+		afaire : make([]func(*st.Personne), 0)
 		statut:   "V",
 	}
 	personnes[dernierID] = p
@@ -130,47 +131,50 @@ func mainteneur(cRequetes chan requete) {
 func gere_connection(conn net.Conn, cRequetes chan requete) {
 	defer conn.Close()
 
-	// Créer un buffer pour lire la requête entrante
-	buffer := make([]byte, 1024)
-	n, err := conn.Read(buffer)
-	if err != nil {
-		fmt.Println("Erreur lors de la lecture de la requête:", err)
-		return
-	}
+	//pour traiter les requetes en continu
+	for{
+		// Créer un buffer pour lire la requête entrante
+		buffer := make([]byte, 1024)
+		n, err := conn.Read(buffer)
+		if err != nil {
+			fmt.Println("Erreur lors de la lecture de la requête:", err)
+			return
+		}
 
-	// Convertir le buffer en string et extraire les informations
-	// Supposons que la requête est formatée comme "methode id"
-	reqDetails := strings.TrimSpace(string(buffer[:n]))
-	parts := strings.Split(reqDetails, " ")
-	if len(parts) != 2 {
-		fmt.Println("Format de requête invalide:", reqDetails)
-		return
-	}
+		// Convertir le buffer en string et extraire les informations
+		// Supposons que la requête est formatée comme "methode id"
+		reqDetails := strings.TrimSpace(string(buffer[:n]))
+		parts := strings.Split(reqDetails, " ")
+		if len(parts) != 2 {
+			fmt.Println("Format de requête invalide:", reqDetails)
+			return
+		}
 
-	methode := parts[0]
-	id, err := strconv.Atoi(parts[1])
-	if err != nil {
-		fmt.Println("ID invalide:", parts[1])
-		return
-	}
+		methode := parts[0]
+		id, err := strconv.Atoi(parts[1])
+		if err != nil {
+			fmt.Println("ID invalide:", parts[1])
+			return
+		}
 
-	// Préparer et envoyer l'action au mainteneur
-	cReponse := make(chan string)
-	act := requete{
-		id:       id,
-		methode:  methode,
-		response: cReponse,
-	}
-	cRequetes <- act
+		// Préparer et envoyer l'action au mainteneur
+		cReponse := make(chan string)
+		act := requete{
+			id:       id,
+			methode:  methode,
+			response: cReponse,
+		}
+		cRequetes <- act
 
-	// Attendre et récupérer la réponse du mainteneur
-	response := <-cReponse
+		// Attendre et récupérer la réponse du mainteneur
+		response := <-cReponse
 
-	// Envoyer la réponse au client
-	_, err = conn.Write([]byte(response + "\n"))
-	if err != nil {
-		fmt.Println("Erreur lors de l'envoi de la réponse:", err)
-	}
+		// Envoyer la réponse au client
+		_, err = conn.Write([]byte(response + "\n"))
+		if err != nil {
+			fmt.Println("Erreur lors de l'envoi de la réponse:", err)
+		}
+	}	
 }
 
 func main() {

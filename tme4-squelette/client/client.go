@@ -37,6 +37,14 @@ type personne_emp struct {
 // paquet de personne distante, pour la Partie 2, implemente l'interface personne_int
 type personne_dist struct {
 	id int //identifiant dans personne_serv
+	cProxy chan requete //pour envoyer les requetes
+}
+
+// type d'une requête pour gérer les requêtes envoyées par le client
+type requete struct {
+	id       int
+	methode  string
+	response chan string
 }
 
 // interface des personnes manipulees par les ouvriers, les
@@ -106,70 +114,118 @@ func (p *personne_emp) donne_statut() string {
 // ces méthodes doivent appeler le proxy (aucun calcul direct)
 
 func (p personne_dist) initialise() {
-	response, err := proxy("initialise", p.id)
-	if err != nil {
-		fmt.Println("Erreur lors de l'initialisation de la personne_dist:", err)
-		return
+	// response, err := proxy("initialise", p.id)
+	// if err != nil {
+	// 	fmt.Println("Erreur lors de l'initialisation de la personne_dist:", err)
+	// 	return
+	// }
+
+	serveurResponse := make(chan string)
+	request := requete{
+		id : p.id,
+		methode : "initialise",
+		response : serveurResponse,
 	}
-	fmt.Println("Réponse du serveur à l'initialisation:", response)
+	p.cProxy <- request
+	
+	// Attendre la réponse du serveur
+	res := <- serveurResponse
+	fmt.Println("Réponse du serveur à l'initialisation:", res)
+
 }
 
 func (p personne_dist) travaille() {
-	response, err := proxy("travaille", p.id)
-	if err != nil {
-		fmt.Println("Erreur lors du travail sur la personne_dist:", err)
-		return
+	// response, err := proxy("travaille", p.id)
+	// if err != nil {
+	// 	fmt.Println("Erreur lors du travail sur la personne_dist:", err)
+	// 	return
+	// }
+	// fmt.Println("Réponse du serveur au travail:", response)
+
+
+	serveurResponse := make(chan string)
+	request := requete{
+		id : p.id,
+		methode : "travaille",
+		response : serveurResponse,
 	}
-	fmt.Println("Réponse du serveur au travail:", response)
+	p.cProxy <- request
+
+	// Attendre la réponse du serveur
+	res := <- serveurResponse
+	fmt.Println("Réponse du serveur au travail:", res)
 }
 
 func (p personne_dist) vers_string() string {
-	response, err := proxy("vers_string", p.id)
-	if err != nil {
-		fmt.Println("Erreur lors de la demande de vers_string à la personne_dist:", err)
-		return "Erreur"
+	// response, err := proxy("vers_string", p.id)
+	// if err != nil {
+	// 	fmt.Println("Erreur lors de la demande de vers_string à la personne_dist:", err)
+	// 	return "Erreur"
+	// }
+	// return response
+
+	serveurResponse := make(chan string)
+	request := requete{
+		id : p.id,
+		methode : "vers_string",
+		response : serveurResponse,
 	}
-	return response
+	p.cProxy <- request
+	return <- serveurResponse
 }
 
 func (p personne_dist) donne_statut() string {
-	response, err := proxy("donne_statut", p.id)
-	if err != nil {
-		fmt.Println("Erreur lors de la demande de statut pour la personne_dist:", err)
-		return "Erreur"
+	// response, err := proxy("donne_statut", p.id)
+	// if err != nil {
+	// 	fmt.Println("Erreur lors de la demande de statut pour la personne_dist:", err)
+	// 	return "Erreur"
+	// }
+	// return response
+
+	serveurResponse := make(chan string)
+	request := requete{
+		id : p.id,
+		methode : "donne_statut",
+		response : serveurResponse,
 	}
-	return response
+	p.cProxy <- request
+	return <- serveurResponse
 }
 
 // *** CODE DES GOROUTINES DU SYSTEME ***
+// type d'une requête pour gérer les requêtes envoyées par le client
 
 // Partie 2: contacté par les méthodes de personne_dist, le proxy appelle la méthode à travers le réseau et récupère le résultat
 // il doit utiliser une connection TCP sur le port donné en ligne de commande
-func proxy(methodName string, personID int, port int) (string, error) {
-	// Récupérer l'adresse du serveur et le port depuis des variables ou les arguments de ligne de commande
-	portStr := strconv.Itoa(port)
+func proxy(cProxy chan requete, port string) error {
 
 	// Établir une connexion TCP avec le serveur
-	conn, err := net.Dial("tcp", ADRESSE+":"+portStr)
+	conn, err := net.Dial("tcp", ADRESSE+":"+ port)
 	if err != nil {
-		return "", fmt.Errorf("failed to connect to server: %v", err)
+		return fmt.Errorf("failed to connect to server: %v", err)
 	}
 	defer conn.Close()
 
-	// Envoyer la requête au serveur
-	request := fmt.Sprintf("%s %d", methodName, personID)
-	_, err = conn.Write([]byte(request + "\n"))
-	if err != nil {
-		return "", fmt.Errorf("failed to send request: %v", err)
-	}
+	for{
+		message, ok := <- cProxy
+		if !ok {
+			return nil // Le canal cProxy est fermé, terminer la fonction
+		}
 
-	// Lire la réponse du serveur
-	response, err := bufio.NewReader(conn).ReadString('\n')
-	if err != nil {
-		return "", fmt.Errorf("failed to read response: %v", err)
-	}
+		// Envoyer la requête au serveur
+		request := fmt.Sprintf("%s %d", message.methode, message.id)
+		_, err = conn.Write([]byte(request + "\n"))
+		if err != nil {
+			return fmt.Errorf("failed to send request: %v", err)
+		}
 
-	return strings.TrimSpace(response), nil
+		// Lire la réponse du serveur
+		reponse, err := bufio.NewReader(conn).ReadString('\n')
+		if err != nil {
+			return fmt.Errorf("failed to read response: %v", err)
+		}
+		message.response <- strings.TrimSpace(reponse)
+	}
 }
 
 // Partie 1 : contacté par la méthode initialise() de personne_emp, récupère une ligne donnée dans le fichier source
@@ -251,18 +307,29 @@ func producteur(cGestionnaire chan personne_int) {
 // Partie 2: les producteurs distants cree des personne_int implementees par des personne_dist qui contiennent un identifiant unique
 // utilisé pour retrouver l'object sur le serveur
 // la creation sur le client d'une personne_dist doit declencher la creation sur le serveur d'une "vraie" personne, initialement vide, de statut V
-func producteur_distant(port int) {
+func producteur_distant(cProxy chan requete) {
+	// response, err := proxy("creer", uniqueID)
+	// if err != nil {
+	// 	fmt.Println("Erreur lors de la création d'une personne_dist:", err)
+	// 	return
+	// }
+
+	// fmt.Println("Réponse du serveur à la création:", response)
+	
 	// Générer un ID unique pour la démonstration; dans une application réelle, cela pourrait être plus complexe
 	uniqueID := rand.Int() // Supposer l'importation de "math/rand"
 
-	// Appeler le proxy pour créer une nouvelle personne_dist sur le serveur
-	response, err := proxy("creer", uniqueID)
-	if err != nil {
-		fmt.Println("Erreur lors de la création d'une personne_dist:", err)
-		return
+	serveurResponse := make(chan string)
+	request := requete{
+		id : uniqueID,
+		methode : "creer",
+		response : serveurResponse,
 	}
-
-	fmt.Println("Réponse du serveur à la création:", response)
+	// envoyer message au proxy pour créer une nouvelle personne_dist sur le serveur
+	cProxy <- request
+	// Attendre la réponse du serveur
+	res := <-serveurResponse
+	fmt.Println("Réponse du serveur à la création:", res)
 }
 
 // Partie 1: les gestionnaires recoivent des personne_int des producteurs et des ouvriers et maintiennent chacun une file de personne_int
@@ -340,7 +407,7 @@ func main() {
 		fmt.Println("Format: client <port> <millisecondes d'attente>")
 		return
 	}
-	port, _ := strconv.Atoi(os.Args[1])   // utile pour la partie 2
+	port := os.Args[1]  // utile pour la partie 2
 	millis, _ := strconv.Atoi(os.Args[2]) // duree du timeout
 	fintemps := make(chan int)
 
@@ -349,6 +416,7 @@ func main() {
 	cCollecteur := make(chan personne_int)
 	cGestionOuvrier := make(chan personne_int)
 	cOuvrierGestion := make(chan personne_int)
+	cProxy := make(chan requete)
 
 	// lancer les goroutines (parties 1 et 2): 1 lecteur, 1 collecteur, des producteurs, des gestionnaires, des ouvriers
 	go collecteur(cCollecteur, fintemps)
@@ -363,10 +431,9 @@ func main() {
 	}
 
 	// lancer les goroutines (partie 2): des producteurs distants, un proxy
-	go proxy()
-
+	go proxy(cProxy, port)
 	for i := 0; i < NB_PD; i++ {
-		go producteur_distant(port)
+		go producteur_distant(cProxy)
 	}
 
 	time.Sleep(time.Duration(millis) * time.Millisecond)
