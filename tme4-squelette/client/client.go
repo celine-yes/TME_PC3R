@@ -70,7 +70,7 @@ func personne_de_ligne(l string) st.Personne {
 // *** METHODES DE L'INTERFACE personne_int POUR LES PAQUETS DE PERSONNES ***
 
 func (p *personne_emp) initialise() {
-	//création d'un canal pour chaque initialise pour avoir la bonne ligne
+	//création d'un canal pour chaque initialise pour que lecteur retourne la bonne ligne au bon paquet
 	cLigne := make(chan string)
 	go lecteur(p.ligne, cLigne) //goroutine lectrice
 	ligne := <-cLigne
@@ -81,7 +81,6 @@ func (p *personne_emp) initialise() {
 	nbTaches := rand.Intn(5) + 1
 	p.afaire = make([]func(*st.Personne), nbTaches)
 	for i := 0; i < nbTaches; i++ {
-		//fonction de travail
 		tache := tr.UnTravail()
 		p.afaire[i] = func(p *st.Personne) {
 			*p = tache(*p)
@@ -95,10 +94,10 @@ func (p *personne_emp) travaille() {
 		tache := p.afaire[0]
 		//applique à la personne la fonction de travail
 		tache(&p.personne)
-		p.afaire = p.afaire[1:] // Supprime la tâche réalisée
+		p.afaire = p.afaire[1:] // supprime la tâche réalisée
 	}
 	if len(p.afaire) == 0 {
-		p.statut = "C" // Statut passé à "Fini"
+		p.statut = "C" // statut passé à "Fini"
 	}
 }
 
@@ -114,18 +113,13 @@ func (p *personne_emp) donne_statut() string {
 // ces méthodes doivent appeler le proxy (aucun calcul direct)
 
 func (p personne_dist) initialise() {
-	// response, err := proxy("initialise", p.id)
-	// if err != nil {
-	// 	fmt.Println("Erreur lors de l'initialisation de la personne_dist:", err)
-	// 	return
-	// }
-
 	serveurResponse := make(chan string)
 	request := requete{
 		id : p.id,
 		methode : "initialise",
 		response : serveurResponse,
 	}
+	//envoyer la requete au proxy
 	p.cProxy <- request
 	
 	// Attendre la réponse du serveur
@@ -142,6 +136,7 @@ func (p personne_dist) travaille() {
 		methode : "travaille",
 		response : serveurResponse,
 	}
+	//envoyer la requete au proxy
 	p.cProxy <- request
 
 	// Attendre la réponse du serveur
@@ -180,7 +175,7 @@ func (p personne_dist) donne_statut() string {
 // il doit utiliser une connection TCP sur le port donné en ligne de commande
 func proxy(cProxy chan requete, port string) error {
 
-	// Établir une connexion TCP avec le serveur
+	// connexion TCP avec le serveur
 	conn, err := net.Dial("tcp", ADRESSE+":"+ port)
 	if err != nil {
 		return fmt.Errorf("failed to connect to server: %v", err)
@@ -193,14 +188,14 @@ func proxy(cProxy chan requete, port string) error {
 			return nil // Le canal cProxy est fermé, terminer la fonction
 		}
 
-		// Envoyer la requête au serveur
+		// envoyer la requête au serveur
 		request := fmt.Sprintf("%s %d", message.methode, message.id)
 		_, err = conn.Write([]byte(request + "\n"))
 		if err != nil {
 			return fmt.Errorf("failed to send request: %v", err)
 		}
 
-		// Lire la réponse du serveur
+		// lire la réponse du serveur
 		reponse, err := bufio.NewReader(conn).ReadString('\n')
 		if err != nil {
 			return fmt.Errorf("failed to read response: %v", err)
@@ -250,14 +245,8 @@ func ouvrier(cGestionOuvrier chan personne_int, cOuvrierGestion chan personne_in
 			case "R": //paquet en cours de modification
 				paquet.travaille()
 				fmt.Println("Ouvrier: travaille")
-				// //vérifier si plus de taches
-				// if paquet.donne_statut() == "C" {
-				// 	cCollecteur <- paquet
-				// 	fmt.Println("Ouvrier: Paquet envoyé à Collecteur")
-				// } else {
 				cGestionOuvrier <- paquet
 				fmt.Println("Ouvrier: Paquet envoyé à Gestionnaire")
-				// }
 			case "C":
 				cCollecteur <- paquet
 				fmt.Println("Ouvrier: Paquet envoyé à Collecteur")
@@ -273,14 +262,13 @@ func producteur(cGestionnaire chan personne_int) {
 	fmt.Println("Producteur a démarré \n")
 	for {
 		nouvellePersonne := personne_emp{
-			personne: st.Personne{Nom: "", Prenom: "", Age: 0, Sexe: "M"}, // Utiliser pers_vide si vous préférez
-			ligne:    rand.Intn(TAILLE_SOURCE) + 1,                        // Générer un numéro de ligne aléatoire
-			afaire:   nil,                                                 // Pas de tâches assignées initialement
-			statut:   "V",                                                 // Statut initial à "V"
+			personne: pers_vide,
+			ligne:    rand.Intn(TAILLE_SOURCE) + 1,
+			afaire:   nil,
+			statut:   "V",
 		}
 
 		// Envoyer la nouvelle personne au gestionnaire
-		//fmt.Println("Producteur: paquet vide envoyé \n")
 		cGestionnaire <- &nouvellePersonne
 	}
 }
@@ -288,29 +276,36 @@ func producteur(cGestionnaire chan personne_int) {
 // Partie 2: les producteurs distants cree des personne_int implementees par des personne_dist qui contiennent un identifiant unique
 // utilisé pour retrouver l'object sur le serveur
 // la creation sur le client d'une personne_dist doit declencher la creation sur le serveur d'une "vraie" personne, initialement vide, de statut V
-func producteur_distant(cProxy chan requete, cGestionnaire chan personne_int) {
-
+func producteur_distant(cProxy chan requete, cGestionnaire chan personne_int, cId chan int) {
 	for{
-		// Générer un ID unique pour la démonstration; dans une application réelle, cela pourrait être plus complexe
-		uniqueID := rand.Int() // Supposer l'importation de "math/rand"
+		uniqueID := <- cId 
 		nouvellePersonneDist := personne_dist{
 			id : uniqueID,
 			cProxy : cProxy,
 		}
 
+		// préparation de la requête à envoyer au proxy
 		serveurResponse := make(chan string)
 		request := requete{
 			id : uniqueID,
 			methode : "creer",
 			response : serveurResponse,
 		}
-		// envoyer message au proxy pour créer une nouvelle personne_dist sur le serveur
+
 		cProxy <- request
-		// Attendre la réponse du serveur
 		res := <-serveurResponse
 		fmt.Println("Réponse du serveur à la création:", res)
 		cGestionnaire <- nouvellePersonneDist
 	}
+}
+
+//goroutine du client chargée de produire des identifiants frais pour les producteurs distants
+func producteur_id(cId chan int){
+	compteur := 0
+	for{
+		cId <- compteur
+		compteur = compteur+1
+	}	
 }
 
 // Partie 1: les gestionnaires recoivent des personne_int des producteurs et des ouvriers et maintiennent chacun une file de personne_int
@@ -318,45 +313,37 @@ func producteur_distant(cProxy chan requete, cGestionnaire chan personne_int) {
 // ATTENTION: la famine des ouvriers doit être évitée: si les producteurs inondent les gestionnaires de paquets, les ouvrier ne pourront
 // plus rendre les paquets surlesquels ils travaillent pour en prendre des autres
 func gestionnaire(cProdGestion chan personne_int, cGestionOuvrier chan personne_int, cOuvrierGestion chan personne_int) {
-	var fileAttente []personne_int // File d'attente des paquets à traiter
+	var fileAttente []personne_int  //file d'attente des paquets à traiter
 	fmt.Println("Gestionnaire a démarré \n")
 	for {
-		// Essayer d'ajouter des paquets à la file d'attente si elle n'est pas pleine
+		// essayer d'ajouter des paquets à la file d'attente si elle n'est pas pleine
+		// on limite à TAILLE_G/2 pour ajouter les paquets des producteurs
+		// pour laisser de la place aux ouvriers et ainsi éviter la famine des ouvriers
 		if len(fileAttente) < TAILLE_G/2 {
 			select {
 			case paquetProd := <-cProdGestion:
-				// Nouveau paquet des producteurs
 				fmt.Println("Gestionnaire: ajout paquet vide dans file")
 				fileAttente = append(fileAttente, paquetProd)
 			default:
-				// Si aucun paquet n'est immédiatement disponible, passer à l'envoi des paquets aux ouvriers
 			}
 		} else {
 			if len(fileAttente) < TAILLE_G {
 				select {
 				case paquetRetour := <-cOuvrierGestion:
-					// Paquet retourné par un ouvrier
 					fmt.Println("Gestionnaire: ajout paquet traité dans file")
 					fileAttente = append(fileAttente, paquetRetour)
 				default:
 				}
 			}
 		}
-		// S'assurer que la logique d'envoi des paquets aux ouvriers fonctionne même si la file est pleine
+		// S'il y a des éléments dans la file, envoyer paquet aux ouvriers
 		if len(fileAttente) > 0 {
 			select {
 			case cGestionOuvrier <- fileAttente[0]:
 				fmt.Println("Gestionnaire: paquet envoyé à un ouvrier")
 				fileAttente = fileAttente[1:]
 			default:
-				// Si aucun ouvrier n'est disponible, introduire un court délai pour éviter une boucle serrée
-				// et donner du temps aux ouvriers de devenir disponibles
-				time.Sleep(1 * time.Millisecond)
 			}
-		} else {
-			// Si la file d'attente est vide, introduire un court délai pour éviter une consommation CPU inutile
-			// en attendant de nouveaux paquets
-			time.Sleep(1 * time.Millisecond)
 		}
 	}
 }
@@ -364,7 +351,7 @@ func gestionnaire(cProdGestion chan personne_int, cGestionOuvrier chan personne_
 // Partie 1: le collecteur recoit des personne_int dont le statut est c, il les collecte dans un journal
 // quand il recoit un signal de fin du temps, il imprime son journal.
 func collecteur(cCollecteur chan personne_int, cFin chan int) {
-	journal := "" // Initialiser le journal comme une chaîne vide
+	journal := "" 
 	fmt.Println("Collecteur a démarré \n")
 	for {
 		select {
@@ -372,12 +359,11 @@ func collecteur(cCollecteur chan personne_int, cFin chan int) {
 			fmt.Println("Collecteur: paquet recu \n")
 			journal += paquet.vers_string() + "\n"
 		case <-cFin:
-			// Lorsque le signal de fin est reçu, imprimer le journal et sortir de la boucle
 			fmt.Println("Journal du collecteur :\n")
 			fmt.Println(journal)
 			fmt.Println("Collecteur a fini \n")
 			cFin <- 0
-			return // Sortir de la fonction après avoir imprimé le journal
+			return 
 		}
 	}
 }
@@ -398,7 +384,9 @@ func main() {
 	cGestionOuvrier := make(chan personne_int)
 	cOuvrierGestion := make(chan personne_int)
 	cProxy := make(chan requete)
+	cId := make(chan int)
 
+	
 	// lancer les goroutines (parties 1 et 2): 1 lecteur, 1 collecteur, des producteurs, des gestionnaires, des ouvriers
 	go collecteur(cCollecteur, fintemps)
 	for i := 0; i < NB_G; i++ {
@@ -413,8 +401,9 @@ func main() {
 
 	// lancer les goroutines (partie 2): des producteurs distants, un proxy
 	go proxy(cProxy, port)
+	go producteur_id(cId)
 	for i := 0; i < NB_PD; i++ {
-		go producteur_distant(cProxy, cProdGestion )
+		go producteur_distant(cProxy, cProdGestion, cId)
 	}
 
 	time.Sleep(time.Duration(millis) * time.Millisecond)

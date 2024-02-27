@@ -32,23 +32,19 @@ type requete struct {
 	response chan string
 }
 
-// pour gérer les personne_serv
-var dernierID int = 0
-
 // map de type (int, personne_serv)
 var personnes = make(map[int]*personne_serv)
 
 // cree une nouvelle personne_serv, est appelé depuis le client, par le proxy, au moment ou un producteur distant
 // produit une personne_dist
 func creer(id int) *personne_serv {
-	dernierID++
 	p := &personne_serv{
-		id:       dernierID,
+		id:       id,
 		personne: pers_vide,
 		afaire : make([]func(*st.Personne), 0),
 		statut:   "V",
 	}
-	personnes[dernierID] = p
+	personnes[id] = p
 	return p
 }
 
@@ -62,7 +58,6 @@ func (p *personne_serv) initialise() {
 	nbTaches := rand.Intn(5) + 1
 	p.afaire = make([]func(*st.Personne), nbTaches)
 	for i := 0; i < nbTaches; i++ {
-		//fonction de travail
 		tache := tr.UnTravail()
 		p.afaire[i] = func(p *st.Personne) {
 			*p = tache(*p)
@@ -75,12 +70,11 @@ func (p *personne_serv) initialise() {
 func (p *personne_serv) travaille() {
 	if len(p.afaire) > 0 {
 		tache := p.afaire[0]
-		//applique à la personne la fonction de travail
 		tache(&p.personne)
-		p.afaire = p.afaire[1:] // Supprime la tâche réalisée
+		p.afaire = p.afaire[1:] // supprime la tâche réalisée
 	}
 	if len(p.afaire) == 0 {
-		p.statut = "C" // Statut passé à "Fini"
+		p.statut = "C" // statut passé à "Fini"
 	}
 }
 
@@ -100,10 +94,12 @@ func mainteneur(cRequetes chan requete) {
 		switch req.methode {
 		case "creer":
 			p := creer(req.id)
+			fmt.Println("Personne créée avec succès. ID: ", p.id)
 			req.response <- fmt.Sprintf("Personne créée avec succès. ID: %d", p.id)
 		case "initialise":
 			if personne, ok := personnes[req.id]; ok {
 				personne.initialise()
+				fmt.Println("Initialisé")
 				req.response <- "Initialisé"
 			} else {
 				req.response <- fmt.Sprintf("Personne avec ID %d non trouvée", req.id)
@@ -111,6 +107,7 @@ func mainteneur(cRequetes chan requete) {
 		case "travaille":
 			if personne, ok := personnes[req.id]; ok {
 				personne.travaille()
+				fmt.Println("Travail terminé")
 				req.response <- "Travail terminé"
 			} else {
 				req.response <- fmt.Sprintf("Personne avec ID %d non trouvée", req.id)
@@ -141,18 +138,15 @@ func mainteneur(cRequetes chan requete) {
 func gere_connection(conn net.Conn, cRequetes chan requete) {
 	defer conn.Close()
 
-	//pour traiter les requetes en continu
 	for{
-		// Créer un buffer pour lire la requête entrante
+		// buffer pour lire la requête entrante
 		buffer := make([]byte, 1024)
 		n, err := conn.Read(buffer)
 		if err != nil {
-			fmt.Println("Erreur lors de la lecture de la requête:", err)
 			return
 		}
 
-		// Convertir le buffer en string et extraire les informations
-		// Supposons que la requête est formatée comme "methode id"
+		//convertir le buffer en string et extraire les informations
 		reqDetails := strings.TrimSpace(string(buffer[:n]))
 		parts := strings.Split(reqDetails, " ")
 		if len(parts) != 2 {
@@ -167,7 +161,7 @@ func gere_connection(conn net.Conn, cRequetes chan requete) {
 			return
 		}
 
-		// Préparer et envoyer l'action au mainteneur
+		//préparer et envoyer l'action au mainteneur
 		cReponse := make(chan string)
 		act := requete{
 			id:       id,
@@ -176,10 +170,10 @@ func gere_connection(conn net.Conn, cRequetes chan requete) {
 		}
 		cRequetes <- act
 
-		// Attendre et récupérer la réponse du mainteneur
+		//attendre et récupérer la réponse du mainteneur
 		response := <-cReponse
 
-		// Envoyer la réponse au client
+		//envoyer la réponse au client
 		_, err = conn.Write([]byte(response + "\n"))
 		if err != nil {
 			fmt.Println("Erreur lors de l'envoi de la réponse:", err)
@@ -201,7 +195,7 @@ func main() {
 	cRequetes := make(chan requete)
 	go mainteneur(cRequetes)
 
-	// Créer un serveur TCP écoutant sur le port spécifié
+	//créer un serveur TCP écoutant sur le port spécifié
 	listener, err := net.Listen("tcp", ":"+strconv.Itoa(port))
 	if err != nil {
 		fmt.Errorf("failed to start server: %v", err)
@@ -210,16 +204,15 @@ func main() {
 
 	fmt.Println("Serveur démarré. En attente de connexions...")
 
-	// Boucle infinie pour accepter les connexions entrantes
+	//boucle infinie pour accepter les connexions entrantes
 	for {
-		// Accepter une nouvelle connexion
+		//accepter une nouvelle connexion
 		conn, err := listener.Accept()
 		if err != nil {
 			fmt.Printf("Erreur lors de l'acceptation d'une connexion: %v\n", err)
 			continue
 		}
-
-		go gere_connection(conn, cRequetes) // passe la connection a une goroutine de gestion des connections
+		go gere_connection(conn, cRequetes) 
 	}
 
 }
