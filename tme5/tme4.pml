@@ -176,4 +176,3 @@ proctype collecteur(chan ouvrierCollecteur; chan obs; chan fin) {
         fin!0;
         printf("Collecteur a fini");
 }
-
